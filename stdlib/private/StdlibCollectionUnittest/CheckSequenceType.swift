@@ -235,7 +235,7 @@ internal struct ForEachTest {
 }
 
 public struct LexicographicallyPrecedesTest {
-  public let expected: ExpectedComparisonResult
+  public let expected: Ordering
   public let sequence: [Int]
   public let other: [Int]
   public let expectedLeftoverSequence: [Int]
@@ -243,7 +243,7 @@ public struct LexicographicallyPrecedesTest {
   public let loc: SourceLoc
 
   public init(
-    _ expected: ExpectedComparisonResult, _ sequence: [Int], _ other: [Int],
+    _ expected: Ordering, _ sequence: [Int], _ other: [Int],
     _ expectedLeftoverSequence: [Int],
     _ expectedLeftoverOther: [Int],
     file: String = #file, line: UInt = #line,

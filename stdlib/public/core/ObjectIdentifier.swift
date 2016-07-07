@@ -76,13 +76,18 @@ extension ObjectIdentifier : CustomDebugStringConvertible {
   }
 }
 
-extension ObjectIdentifier : Comparable {
-  public static func < (lhs: ObjectIdentifier, rhs: ObjectIdentifier) -> Bool {
-    return UInt(bitPattern: lhs) < UInt(bitPattern: rhs)
+extension ObjectIdentifier : Equatable {
+  public func isEqual(to y: ObjectIdentifier) -> Bool {
+    return Bool(Builtin.cmp_eq_RawPointer(self._value, y._value))
   }
+}
 
-  public static func == (x: ObjectIdentifier, y: ObjectIdentifier) -> Bool {
-    return Bool(Builtin.cmp_eq_RawPointer(x._value, y._value))
+extension ObjectIdentifier : Comparable {
+  public static func <=>(
+    lhs: ObjectIdentifier,
+    rhs: ObjectIdentifier
+  ) -> Ordering {
+    return UInt(lhs) <=> UInt(rhs)
   }
 }
 

@@ -603,6 +603,16 @@ extension ${Self}: BinaryFloatingPoint {
   }
 
   @_transparent
+  public static func <=>(lhs: ${Self}, rhs: ${Self}) -> Ordering {
+    if lhs.isLess(rhs) {
+      return .ascending
+    } else if rhs.isLess(lhs) {
+      return .descending
+    }
+    return .equivalent
+  }
+
+  @_transparent
   public func isEqual(to other: ${Self}) -> Bool {
     return Bool(Builtin.fcmp_oeq_FPIEEE${bits}(self._value, other._value))
   }

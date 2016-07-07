@@ -640,6 +640,7 @@ infix operator ?? : NilCoalescingPrecedence
 
 // "Comparative"
 
+infix operator <=> : ComparisonPrecedence
 infix operator  <  : ComparisonPrecedence
 infix operator  <= : ComparisonPrecedence
 infix operator  >  : ComparisonPrecedence
@@ -648,6 +649,7 @@ infix operator  == : ComparisonPrecedence
 infix operator  != : ComparisonPrecedence
 infix operator === : ComparisonPrecedence
 infix operator !== : ComparisonPrecedence
+
 // FIXME: ~= will be built into the compiler.
 infix operator  ~= : ComparisonPrecedence
 

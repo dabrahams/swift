@@ -33,6 +33,33 @@ public struct ClosedRangeIndex<Bound>
   // contexts.
   Bound : _Strideable & Comparable,
   Bound.Stride : SignedInteger {
+  
+  public func isEqual(to rhs: ClosedRangeIndex<Bound>) -> Bool {
+    switch (self._value, rhs._value) {
+    case (.inRange(let l), .inRange(let r)):
+      return l == r
+    case (.pastEnd, .pastEnd):
+      return true
+    default:
+      return false
+    }
+  }
+
+  public static func <=> <B>(
+    lhs: ClosedRangeIndex<B>, rhs: ClosedRangeIndex<B>
+  ) -> Ordering {
+    switch (lhs._value, rhs._value) {
+    case (.inRange(let l), .inRange(let r)):
+      return l <=> r
+    case (.inRange(_), .pastEnd):
+      return .ascending
+    case (.pastEnd, .inRange(_)):
+      return .descending
+    case (.pastEnd, .pastEnd):
+      return .equivalent
+    }
+  }
+
   /// Creates the "past the end" position.
   internal init() { _value = .pastEnd }
 
@@ -44,36 +71,6 @@ public struct ClosedRangeIndex<Bound>
     switch _value {
     case .inRange(let x): return x
     case .pastEnd: _preconditionFailure("Index out of range")
-    }
-  }
-}
-
-extension ClosedRangeIndex : Comparable {
-  public static func == (
-    lhs: ClosedRangeIndex<Bound>,
-    rhs: ClosedRangeIndex<Bound>
-  ) -> Bool {
-    switch (lhs._value, rhs._value) {
-    case (.inRange(let l), .inRange(let r)):
-      return l == r
-    case (.pastEnd, .pastEnd):
-      return true
-    default:
-      return false
-    }
-  }
-
-  public static func < (
-    lhs: ClosedRangeIndex<Bound>,
-    rhs: ClosedRangeIndex<Bound>
-  ) -> Bool {
-    switch (lhs._value, rhs._value) {
-    case (.inRange(let l), .inRange(let r)):
-      return l < r
-    case (.inRange(_), .pastEnd):
-      return true
-    default:
-      return false
     }
   }
 }

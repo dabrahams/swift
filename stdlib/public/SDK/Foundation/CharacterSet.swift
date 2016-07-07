@@ -439,11 +439,10 @@ public struct CharacterSet : ReferenceConvertible, Equatable, Hashable, SetAlgeb
     }
 
     /// Returns true if the two `CharacterSet`s are equal.
-    public static func ==(lhs : CharacterSet, rhs: CharacterSet) -> Bool {
-        return lhs._wrapped.isEqual(rhs as NSCharacterSet)
+    public func isEqual(to rhs: CharacterSet) -> Bool {
+      return self._wrapped.isEqual(rhs as NSCharacterSet)
     }
 }
-
 
 // MARK: Objective-C Bridging
 extension CharacterSet : _ObjectiveCBridgeable {

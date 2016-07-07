@@ -52,19 +52,16 @@ public struct ReversedIndex<Base : Collection> : Comparable {
   /// The position corresponding to `self` in the underlying collection.
   public let base: Base.Index
 
-  public static func == (
-    lhs: ReversedIndex<Base>,
-    rhs: ReversedIndex<Base>
-  ) -> Bool {
+  public func isEqual(to rhs: ReversedIndex<Base>) -> Bool {
     return lhs.base == rhs.base
   }
 
-  public static func < (
+  public static func <=> <Base : Collection>(
     lhs: ReversedIndex<Base>,
     rhs: ReversedIndex<Base>
-  ) -> Bool {
+  ) -> Ordering {
     // Note ReversedIndex has inverted logic compared to base Base.Index
-    return lhs.base > rhs.base
+    return lhs.base <=> rhs.base
   }
 }
 
@@ -163,19 +160,16 @@ public struct ReversedRandomAccessIndex<
   /// The position corresponding to `self` in the underlying collection.
   public let base: Base.Index
 
-  public static func == (
-    lhs: ReversedRandomAccessIndex<Base>,
-    rhs: ReversedRandomAccessIndex<Base>
-  ) -> Bool {
+  public func isEqual(to rhs: ReversedRandomAccessIndex<Base>) -> Bool {
     return lhs.base == rhs.base
   }
 
-  public static func < (
+  public static func <=> <Base : Collection>(
     lhs: ReversedRandomAccessIndex<Base>,
     rhs: ReversedRandomAccessIndex<Base>
-  ) -> Bool {
+    ) -> Ordering {
     // Note ReversedRandomAccessIndex has inverted logic compared to base Base.Index
-    return lhs.base > rhs.base
+    return lhs.base <=> rhs.base
   }
 }
 

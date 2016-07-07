@@ -166,6 +166,33 @@ public struct ${Index}<BaseElements>
   BaseElements : ${collectionForTraversal(traversal)},
   ${constraints % {'Base': 'BaseElements.'}} {
 
+  public static func <=> <BaseElements> (
+    lhs: ${Index}<BaseElements>,
+    rhs: ${Index}<BaseElements>
+  ) -> Ordering {
+    // FIXME: swift-3-indexing-model: tests.
+    if lhs._outer != rhs._outer {
+      return lhs._outer <=> rhs._outer
+    }
+
+    if let lhsInner = lhs._inner, let rhsInner = rhs._inner {
+      return lhsInner <=> rhsInner
+    }
+
+    // When combined, the two conditions above guarantee that both
+    // `_outer` indices are `_base.endIndex` and both `_inner` indices
+    // are `nil`, since `_inner` is `nil` iff `_outer == base.endIndex`.
+    _precondition(lhs._inner == nil && rhs._inner == nil)
+
+    // FIXME.
+    fatalError("")
+    //  return false
+  }
+
+  public func isEqual(to rhs: ${Index}<BaseElements>) -> Bool {
+    return self._outer == rhs._outer && self._inner == rhs._inner
+  }
+
   internal init(
     _ _outer: BaseElements.Index,
     _ inner: BaseElements.Iterator.Element.Index?) {
@@ -183,36 +210,6 @@ public struct ${Index}<BaseElements>
   /// when `_inner == nil`, `_outer == base.endIndex` and this index is
   /// `endIndex` of the `${Collection}`.
   internal let _inner: BaseElements.Iterator.Element.Index?
-}
-
-extension ${Index} : Comparable {
-  public static func == (
-    lhs: ${Index}<BaseElements>,
-    rhs: ${Index}<BaseElements>
-  ) -> Bool {
-    return lhs._outer == rhs._outer && lhs._inner == rhs._inner
-  }
-
-  public static func < (
-    lhs: ${Index}<BaseElements>,
-    rhs: ${Index}<BaseElements>
-  ) -> Bool {
-    // FIXME: swift-3-indexing-model: tests.
-    if lhs._outer != rhs._outer {
-      return lhs._outer < rhs._outer
-    }
-
-    if let lhsInner = lhs._inner, let rhsInner = rhs._inner {
-      return lhsInner < rhsInner
-    }
-
-    // When combined, the two conditions above guarantee that both
-    // `_outer` indices are `_base.endIndex` and both `_inner` indices
-    // are `nil`, since `_inner` is `nil` iff `_outer == base.endIndex`.
-    _precondition(lhs._inner == nil && rhs._inner == nil)
-
-    return false
-  }
 }
 
 /// A flattened view of a base collection of collections.

@@ -138,6 +138,12 @@ extension String {
       init(_offset: Int) { self._offset = _offset }
 
       public let _offset: Int
+
+      // FIXME: swift-3-indexing-model: add complete set of forwards for Comparable
+      //        assuming String.UTF8View.Index continues to exist
+      public func isEqual(to rhs: Index) -> Bool {
+        return lhs._offset == rhs._offset
+      }
     }
 
     public typealias IndexDistance = Int
@@ -355,18 +361,10 @@ extension String {
 extension String.UTF16View.Index : Comparable {
   // FIXME: swift-3-indexing-model: add complete set of forwards for Comparable 
   //        assuming String.UTF8View.Index continues to exist
-  public static func == (
-    lhs: String.UTF16View.Index,
-    rhs: String.UTF16View.Index
-  ) -> Bool {
-    return lhs._offset == rhs._offset
-  }
-
-  public static func < (
-    lhs: String.UTF16View.Index,
-    rhs: String.UTF16View.Index
-  ) -> Bool {
-    return lhs._offset < rhs._offset
+  public static func <=> (
+    lhs: String.UTF16View.Index, rhs: String.UTF16View.Index
+  ) -> Ordering {
+    return lhs._offset <=> rhs._offset
   }
 }
 

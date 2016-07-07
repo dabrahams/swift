@@ -97,14 +97,6 @@ public final class Box<T> {
   public var value: T
 }
 
-infix operator <=>
-
-public func <=> <T: Comparable>(lhs: T, rhs: T) -> ExpectedComparisonResult {
-  return lhs < rhs
-    ? .lt
-    : lhs > rhs ? .gt : .eq
-}
-
 public struct TypeIdentifier : Hashable, Comparable {
   public init(_ value: Any.Type) {
     self.value = value

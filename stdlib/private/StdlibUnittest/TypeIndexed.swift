@@ -91,7 +91,7 @@ extension TypeIndexed where Value : Equatable {
 public func <=> <T: Comparable>(
   lhs: (TypeIdentifier, T),
   rhs: (TypeIdentifier, T)
-) -> ExpectedComparisonResult {
+) -> Ordering {
   let a = lhs.0 <=> rhs.0
   if !a.isEQ() { return a }
   return lhs.1 <=> rhs.1

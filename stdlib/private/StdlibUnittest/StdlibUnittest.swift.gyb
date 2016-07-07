@@ -2079,9 +2079,7 @@ public func checkHashable<T : Hashable>(
     [lhs, rhs], equalityOracle: { expectedEqual || $0 == $1 }, ${trace})
 }
 
-public enum ExpectedComparisonResult {
-  case lt, eq, gt
-
+extension Ordering {
   public func isLT() -> Bool {
     return self == .lt
   }
@@ -2106,7 +2104,7 @@ public enum ExpectedComparisonResult {
     return !isEQ()
   }
 
-  public func flip() -> ExpectedComparisonResult {
+  public func flip() -> Ordering {
     switch self {
     case .lt:
       return .gt
@@ -2118,7 +2116,7 @@ public enum ExpectedComparisonResult {
   }
 }
 
-extension ExpectedComparisonResult : CustomStringConvertible {
+extension Ordering : CustomStringConvertible {
   public var description: String {
     switch self {
     case .lt:
@@ -2139,7 +2137,7 @@ extension ExpectedComparisonResult : CustomStringConvertible {
 ///   laws.
 public func checkComparable<Instances : Collection>(
   _ instances: Instances,
-  oracle: (Instances.Index, Instances.Index) -> ExpectedComparisonResult,
+  oracle: (Instances.Index, Instances.Index) -> Ordering,
   ${TRACE}
 ) where
   Instances.Iterator.Element : Comparable,
@@ -2226,7 +2224,7 @@ public func checkComparable<Instances : Collection>(
 }
 
 public func checkComparable<T : Comparable>(
-  _ expected: ExpectedComparisonResult, _ lhs: T, _ rhs: T, ${TRACE}
+  _ expected: Ordering, _ lhs: T, _ rhs: T, ${TRACE}
 ) {
   checkComparable(
     [lhs, rhs],
@@ -2348,7 +2346,7 @@ public func expectEqualsUnordered<
 >(
   _ expected: Expected, _ actual: Actual, ${TRACE},
   compare: @escaping (Expected.Iterator.Element, Expected.Iterator.Element)
-    -> ExpectedComparisonResult
+    -> Ordering
 ) where
   Expected.Iterator.Element == Actual.Iterator.Element {
 

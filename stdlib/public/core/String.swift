@@ -485,6 +485,32 @@ extension String {
   }
 }
 
+extension String : Equatable {
+  public func isEqual(to rhs: String) -> Bool {
+    if self._core.isASCII && rhs._core.isASCII {
+      if self._core.count != rhs._core.count {
+        return false
+      }
+      return _swift_stdlib_memcmp(
+        self._core.startASCII, rhs._core.startASCII,
+        rhs._core.count) == 0
+    }
+    return self._compareString(rhs) == 0
+  }
+}
+
+extension String : Comparable {
+  public static func <=>(lhs: String, rhs: String) -> Ordering {
+    if lhs._compareString(rhs) < 0 {
+      return .ascending
+    } else if lhs._compareString(rhs) > 0 {
+      return .descending
+    }
+    return .equivalent
+  }
+}
+
+
 // Support for copy-on-write
 extension String {
 

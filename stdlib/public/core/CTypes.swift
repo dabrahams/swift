@@ -138,6 +138,10 @@ public struct OpaquePointer : Hashable {
   public var hashValue: Int {
     return Int(Builtin.ptrtoint_Word(_rawValue))
   }
+
+  public func isEqual(to rhs: OpaquePointer) -> Bool {
+    return Bool(Builtin.cmp_eq_RawPointer(self._rawValue, rhs._rawValue))
+  }
 }
 
 extension OpaquePointer : CustomDebugStringConvertible {
@@ -156,12 +160,6 @@ extension Int {
 extension UInt {
   public init(bitPattern pointer: OpaquePointer?) {
     self.init(bitPattern: UnsafeRawPointer(pointer))
-  }
-}
-
-extension OpaquePointer : Equatable {
-  public static func == (lhs: OpaquePointer, rhs: OpaquePointer) -> Bool {
-    return Bool(Builtin.cmp_eq_RawPointer(lhs._rawValue, rhs._rawValue))
   }
 }
 

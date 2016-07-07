@@ -141,20 +141,8 @@ extension Bool : Equatable, Hashable {
   }
 
   @_transparent
-  public static func == (lhs: Bool, rhs: Bool) -> Bool {
-    return Bool(Builtin.cmp_eq_Int1(lhs._value, rhs._value))
-  }
-}
-
-extension Bool : LosslessStringConvertible {
-  public init?(_ description: String) {
-    if description == "true" {
-      self = true
-    } else if description == "false" {
-      self = false
-    } else {
-      return nil
-    }
+  public func isEqual(to rhs: Bool) -> Bool {
+    return Bool(Builtin.cmp_eq_Int1(self._value, rhs._value))
   }
 }
 
@@ -264,3 +252,4 @@ extension Bool {
     return lhs ? true : try rhs()
   }
 }
+
