@@ -129,8 +129,8 @@ static void deriveBodyEquatable_enum_eq(AbstractFunctionDecl *eqDecl) {
   ASTContext &C = parentDC->getASTContext();
 
   auto args = eqDecl->getParameterLists().back();
-  auto aParam = args->get(0);
-  auto bParam = args->get(1);
+  auto aParam = eqDecl->getImplicitSelfDecl();
+  auto bParam = args->get(0);
 
   CanType boolTy = C.getBoolDecl()->getDeclaredType().getCanonicalTypeOrNull();
 
@@ -146,10 +146,10 @@ static void deriveBodyEquatable_enum_eq(AbstractFunctionDecl *eqDecl) {
   // Generate the compare of the indices.
   FuncDecl *cmpFunc = C.getEqualIntDecl(nullptr);
   assert(cmpFunc && "should have a == for int as we already checked for it");
-  
+
   auto fnType = dyn_cast<FunctionType>(cmpFunc->getType()->getCanonicalType());
   auto tType = fnType.getInput();
-  
+
   TupleExpr *abTuple = TupleExpr::create(C, SourceLoc(), { aIndex, bIndex },
                                          { }, { }, SourceLoc(),
                                          /*HasTrailingClosure*/ false,
@@ -173,7 +173,7 @@ deriveEquatable_enum_eq(TypeChecker &tc, Decl *parentDecl, EnumDecl *enumDecl) {
   //   case A, B, C
   //
   //   @derived
-  //   func ==(a: SomeEnum<T...>, b: SomeEnum<T...>) -> Bool {
+  //   func isEqual(to other: SomeEnum<T...>) -> Bool {
   //     var index_a: Int
   //     switch a {
   //     case .A: index_a = 0
@@ -188,7 +188,7 @@ deriveEquatable_enum_eq(TypeChecker &tc, Decl *parentDecl, EnumDecl *enumDecl) {
   //     }
   //     return index_a == index_b
   //   }
-  
+  // }
   ASTContext &C = tc.Context;
   
   auto parentDC = cast<DeclContext>(parentDecl);
@@ -196,61 +196,43 @@ deriveEquatable_enum_eq(TypeChecker &tc, Decl *parentDecl, EnumDecl *enumDecl) {
   
   auto getParamDecl = [&](StringRef s) -> ParamDecl* {
     return new (C) ParamDecl(/*isLet*/true, SourceLoc(), SourceLoc(),
-                             Identifier(), SourceLoc(), C.getIdentifier(s),
-                             enumTy, parentDC);
+                             C.getIdentifier(s), SourceLoc(), C.getIdentifier(s),
+                             enumTy, enumDecl);
   };
 
-  auto selfDecl = ParamDecl::createUnboundSelf(SourceLoc(), parentDC);
-  
-  ParameterList *params[] = {
-    ParameterList::createWithoutLoc(selfDecl),
-    ParameterList::create(C, {
-        getParamDecl("a"),
-        getParamDecl("b")
-    })
-  };
+  auto selfDecl = ParamDecl::createSelf(SourceLoc(), enumDecl, false, false);
+  auto params = ParameterList::create(C, {
+    selfDecl,
+    getParamDecl("to"),
+  });
 
   auto boolTy = C.getBoolDecl()->getDeclaredType();
 
-  DeclName name(C, C.Id_EqualsOperator, params[1]);
+  DeclName name(C, C.Id_isEqual, params);
   auto eqDecl =
     FuncDecl::create(C, /*StaticLoc=*/SourceLoc(),
                      StaticSpellingKind::KeywordStatic,
                      /*FuncLoc=*/SourceLoc(), name, /*NameLoc=*/SourceLoc(),
                      /*Throws=*/false, /*ThrowsLoc=*/SourceLoc(),
                      /*AccessorKeywordLoc=*/SourceLoc(),
-                     /*GenericParams=*/nullptr,
+                     /*GenericParams*/ nullptr,
                      params, Type(),
                      TypeLoc::withoutLoc(boolTy),
-                     parentDC);
-  eqDecl->setImplicit();
-  eqDecl->getAttrs().add(new (C) InfixAttr(/*implicit*/false));
+                     enumDecl);
+
   auto op = C.getStdlibModule()->lookupInfixOperator(C.Id_EqualsOperator);
   if (!op) {
     tc.diagnose(parentDecl->getLoc(),
                 diag::broken_equatable_eq_operator);
     return nullptr;
   }
-  if (!C.getEqualIntDecl(nullptr)) {
-    tc.diagnose(parentDecl->getLoc(), diag::no_equal_overload_for_int);
-    return nullptr;
-  }
 
-  // Fill in the 'self' type.
-  Type selfTy = eqDecl->computeSelfType();
-  selfDecl->overwriteType(selfTy);
-
-  eqDecl->setOperatorDecl(op);
+  eqDecl->setDerivedForTypeDecl(enumDecl);
   eqDecl->setBodySynthesizer(&deriveBodyEquatable_enum_eq);
 
   // Compute the type.
-  GenericParamList *genericParams = eqDecl->getGenericParamsOfContext();
-  Type paramsTy = params[1]->getType(tc.Context);
+  auto paramsTy = params->getType(C);
   Type fnTy = FunctionType::get(paramsTy, boolTy);
-  if (genericParams)
-    fnTy = PolymorphicFunctionType::get(selfTy, fnTy, genericParams);
-  else
-    fnTy = FunctionType::get(selfTy, fnTy);
   eqDecl->setType(fnTy);
 
   // Compute the interface type.
@@ -265,29 +247,24 @@ deriveEquatable_enum_eq(TypeChecker &tc, Decl *parentDecl, EnumDecl *enumDecl) {
       enumIfaceTy, enumIfaceTy,
     };
     auto ifaceParamsTy = TupleType::get(ifaceParamElts, C);
-    interfaceTy = FunctionType::get(ifaceParamsTy, boolTy,
-                                    AnyFunctionType::ExtInfo());
-    interfaceTy = GenericFunctionType::get(genericSig, selfIfaceTy, interfaceTy,
+    interfaceTy = GenericFunctionType::get(genericSig, ifaceParamsTy, boolTy,
                                            AnyFunctionType::ExtInfo());
-  } else {
-    interfaceTy = FunctionType::get(paramsTy, boolTy);
-    interfaceTy = FunctionType::get(selfIfaceTy, interfaceTy);
   }
   eqDecl->setInterfaceType(interfaceTy);
 
-  // Since we can't insert the == operator into the same FileUnit as the enum,
-  // itself, we have to give it at least internal access.
+  // Since we can't insert the `isEqual(to:)` member into the same FileUnit as
+  // the enum, itself, we have to give it at least internal access.
   eqDecl->setAccessibility(std::max(enumDecl->getFormalAccess(),
                                     Accessibility::Internal));
 
   // If the enum was not imported, the derived conformance is either from the
   // enum itself or an extension, in which case we will emit the declaration
   // normally.
-  if (enumDecl->hasClangNode())
-    tc.Context.addExternalDecl(eqDecl);
-  
-  // Add the operator to the parent scope.
-  cast<IterableDeclContext>(parentDecl)->addMember(eqDecl);
+//  if (enumDecl->hasClangNode())
+//    tc.Context.addExternalDecl(eqDecl);
+
+  // Create the member.
+  cast<IterableDeclContext>(enumDecl)->addMember(eqDecl);
 
   return eqDecl;
 }
@@ -301,7 +278,7 @@ ValueDecl *DerivedConformance::deriveEquatable(TypeChecker &tc,
     return nullptr;
 
   // Build the necessary decl.
-  if (requirement->getName().str() == "==") {
+  if (requirement->getName().str() == "isEqual") {
     if (auto theEnum = dyn_cast<EnumDecl>(type))
       return deriveEquatable_enum_eq(tc, parentDecl, theEnum);
     else
