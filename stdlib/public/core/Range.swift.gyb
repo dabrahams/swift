@@ -517,10 +517,9 @@ extension ${Self} : CustomReflectable {
 }
 
 extension ${Self} : Equatable {
-  public static func == (lhs: ${Self}<Bound>, rhs: ${Self}<Bound>) -> Bool {
-    return
-      lhs.lowerBound == rhs.lowerBound &&
-      lhs.upperBound == rhs.upperBound
+  public func isEqual(to rhs: ${Self}<Bound>) -> Bool {
+    return self.lowerBound == rhs.lowerBound &&
+           self.upperBound == rhs.upperBound
   }
 
   public static func ~= (pattern: ${Self}<Bound>, value: Bound) -> Bool {

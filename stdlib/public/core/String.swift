@@ -501,15 +501,15 @@ extension String : Equatable {
 
 extension String : Comparable {
   public static func <=>(lhs: String, rhs: String) -> Ordering {
-    if lhs._compareString(rhs) < 0 {
+    let compareResult = lhs._compareString(rhs)
+    if compareResult < 0 {
       return .ascending
-    } else if lhs._compareString(rhs) > 0 {
+    } else if compareResult > 0 {
       return .descending
     }
     return .equivalent
   }
 }
-
 
 // Support for copy-on-write
 extension String {

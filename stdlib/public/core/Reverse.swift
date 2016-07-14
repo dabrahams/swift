@@ -53,7 +53,7 @@ public struct ReversedIndex<Base : Collection> : Comparable {
   public let base: Base.Index
 
   public func isEqual(to rhs: ReversedIndex<Base>) -> Bool {
-    return lhs.base == rhs.base
+    return self.base == rhs.base
   }
 
   public static func <=> <Base : Collection>(
@@ -161,7 +161,7 @@ public struct ReversedRandomAccessIndex<
   public let base: Base.Index
 
   public func isEqual(to rhs: ReversedRandomAccessIndex<Base>) -> Bool {
-    return lhs.base == rhs.base
+    return self.base == rhs.base
   }
 
   public static func <=> <Base : Collection>(

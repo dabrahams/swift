@@ -75,7 +75,7 @@ ValueDecl *deriveEquatable(TypeChecker &tc,
                            Decl *parentDecl,
                            NominalTypeDecl *type,
                            ValueDecl *requirement);
-  
+
 /// Derive a Hashable requirement for a type.
 ///
 /// Currently this is only implemented for enums without associated values.

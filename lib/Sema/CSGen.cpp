@@ -542,7 +542,7 @@ namespace {
 
     return false;
   }
-  
+
   /// Favor certain overloads in a call based on some basic analysis
   /// of the overload set and call arguments.
   ///
@@ -744,7 +744,7 @@ namespace {
       auto fnTy = valueTy->getAs<AnyFunctionType>();
       if (!fnTy)
         return false;
-      
+
       // Figure out the parameter type.
       if (value->getDeclContext()->isTypeContext()) {
         fnTy = fnTy->getResult()->castTo<AnyFunctionType>();
@@ -880,7 +880,18 @@ namespace {
       auto secondFavoredTy = CS.getFavoredType(secondArg);
       
       auto favoredExprTy = CS.getFavoredType(expr);
-      
+
+      if (value->getName().str() == "==") {
+        if (auto d = dyn_cast_or_null<FuncDecl>(value)) {
+          if (auto gp = d->getInterfaceType()->getAs<GenericFunctionType>()) {
+            if (gp->getRequirements().size() > 2) {
+              return true;
+            }
+          }
+        }
+        return false;
+      }
+
       if (isArithmeticOperatorDecl(value)) {
         // If the parent has been favored on the way down, propagate that
         // information to its children.
@@ -919,7 +930,7 @@ namespace {
       
       auto resultTy = fnTy->getResult();
       auto contextualTy = CS.getContextualType(expr);
-      
+
       return
         (isFavoredParamAndArg(CS, firstParamTy, firstArg, firstArgTy,
                               secondArgTy) ||
@@ -928,8 +939,6 @@ namespace {
          firstParamTy->isEqual(secondParamTy) &&
         (!contextualTy || contextualTy->isEqual(resultTy));
     };
-    
-    favorCallOverloads(expr, CS, isFavoredDecl);
   }
   
   class ConstraintOptimizer : public ASTWalker {

@@ -219,6 +219,11 @@ public struct ManagedBufferPointer<Header, Element> : Equatable {
     self._nativeBuffer = Builtin.castToNativeObject(buffer)
   }
 
+
+  public func isEqual(to rhs: ManagedBufferPointer<Header, Element>) -> Bool {
+    return self._address == rhs._address
+  }
+
   /// The stored `Header` instance.
   public var header: Header {
     addressWithNativeOwner {
@@ -433,13 +438,6 @@ public struct ManagedBufferPointer<Header, Element> : Equatable {
   }
 
   internal var _nativeBuffer: Builtin.NativeObject
-}
-
-public func == <Header, Element>(
-  lhs: ManagedBufferPointer<Header, Element>,
-  rhs: ManagedBufferPointer<Header, Element>
-) -> Bool {
-  return lhs._address == rhs._address
 }
 
 // FIXME: when our calling convention changes to pass self at +0,

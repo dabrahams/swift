@@ -122,10 +122,6 @@ public struct Selector : ExpressibleByStringLiteral {
   }
 }
 
-public func ==(lhs: Selector, rhs: Selector) -> Bool {
-  return sel_isEqual(lhs, rhs)
-}
-
 extension Selector : Equatable, Hashable {
   /// The hash value.
   ///
@@ -136,6 +132,10 @@ extension Selector : Equatable, Hashable {
   ///   hash value across program runs.
   public var hashValue: Int {
     return ptr.hashValue
+  }
+
+  public func isEqual(to rhs: Selector) -> Bool {
+    return sel_isEqual(self, rhs)
   }
 }
 
@@ -223,10 +223,10 @@ extension NSObject : Equatable, Hashable {
   open var hashValue: Int {
     return hash
   }
-}
 
-public func == (lhs: NSObject, rhs: NSObject) -> Bool {
-  return lhs.isEqual(rhs)
+  public func isEqual(to rhs: NSObject) -> Bool {
+    return self.isEqual(rhs)
+  }
 }
 
 extension NSObject : CVarArg {

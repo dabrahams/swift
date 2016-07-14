@@ -33,11 +33,8 @@ public enum UnicodeDecodingResult : Equatable {
   /// An indication of a decoding error.
   case error
 
-  public static func == (
-    lhs: UnicodeDecodingResult,
-    rhs: UnicodeDecodingResult
-  ) -> Bool {
-    switch (lhs, rhs) {
+  public func isEqual(to rhs: UnicodeDecodingResult) -> Bool {
+    switch (self, rhs) {
     case (.scalarValue(let lhsScalar), .scalarValue(let rhsScalar)):
       return lhsScalar == rhsScalar
     case (.emptyInput, .emptyInput):
