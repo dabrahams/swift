@@ -31,10 +31,10 @@ ergonomics or correctness is more of a challenge.
 ### API Surface Area
 
 What does this API do?  When should I use it?  Answers to these questions should
-be plainly obvious for APIs of primary data types.  In my opinion, `String`
-fails that test.  It currently has 205 APIs, which I've broken them down into
-Standard Library and Foundation, simply to show that both contribute
-significantly to overall complexity:
+be plainly obvious for APIs of primary data types, but `String` fails that test.
+It currently has 205 APIs. I've broken them down into Standard Library and
+Foundation, simply to show that both contribute significantly to overall
+complexity:
 
 | Source | `init` | `func` | `subscript` | `var` |
 |--------------|----|----|---|----|
@@ -144,7 +144,7 @@ the following should evaluate as `true`, but currently do not:
 "\u{222c}\u{222c}\u{222c}" == "\u{222d}\u{222d}"
 ```
 
-Strings in Swift are specifically intended to be—and documented as—being
+Strings in Swift are specifically intended to be—and are documented as—
 Unicode-correct, so deviating from the standard in this way is not consistent
 with our stated goals.
 
@@ -182,7 +182,7 @@ efficient storage.  However,
   bits is enough to store many strings inline and works well for out-of-line
   storage.
 
-### There's No Way to Opt Out of Type Erasure
+### No Way to Opt Out of Type Erasure
 
 As noted above, many strings are short enough to store in 64 bits, many can be
 stored using only 8 bits per unicode scalar, others are best encoded in UTF-16,
