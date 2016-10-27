@@ -41,7 +41,7 @@ significantly to overall complexity:
 |**Standard Library** | 41 | 42 | 9 | 26 |
 |**Foundation**| 18 | 55 | 0 | 14 |
 
-method arity lines up as follows:
+Method arity lines up as follows:
 
 | Arity | Standard Library | Foundation |
 |---|---|---|
@@ -124,10 +124,9 @@ There is strong evidence that developers cannot determine how to use our
 international APIs correctly.  Most developers are not experts in localization,
 and the current international APIs present an often bewildering catalogue of
 choices.  Many `String` APIs that require special attention in an international
-context take four or more parameters. It is especially important for an audience
-of mostly non-experts that, naïve code that compiles is very likely to be
-correct, and that they can progressively learn more sophisticated techniques as
-they are needed.
+context take four or more parameters. For an audience of mostly non-experts, it
+is especially important that naïve code is very likely to be correct if it
+compiles, and that more sophisticated issues can be revealed progressively.
 
 Among the most common internationalization errors is the unintentional
 presentation to end-users of text that has not been localized.  Fortunately,
@@ -150,23 +149,30 @@ Unicode-correct, so deviating from the standard in this way is not consistent
 with our stated goals.
 
 - Note: `CFString` (to which Swift's comparison implementation dispatches) and
-  `NSString` behave the same as `String` in this regard. It would be
-  best if they all had the same, Unicode-correct, behavior.
+  `NSString` behave the same as `String` in this regard. Ideally they would all
+  have the same, Unicode-correct, behavior, but there may be legacy reasons that
+  the non-native types must remain as they are.
 
-## Ergonomics and Correctness
+### We Only Implement Unicode 8 Grapheme Breaking
 
-### API Surface Area
-
-## Correctness
+Unicode 9 (and MacOS 10.11) brought us support for family emoji, which changes
+the process of properly identifying `Character` boundaries from an O(1)
+operation to worst-case O(N).  The change in complexity is not a great concern
+because N is typically very small, but it reflects fundamental changes in how
+the breaking algorithm works, and we need to update `String` to account for it.
 
 ### Unicode 9
 
 ### Emoji Support
 
-## Performance
+### Substrings “Leak” Memory
 
-### Substrings Currently Leak Memory
+Slicing a `String` produces a new `String` that keeps the entire original
+alive. This arrangement has proven to be problematic in other programming
+languages, because applications sometimes extract small strings from large ones
+and keep those small strings long-term.
 
+### Subdstrings Have 
 ### Opting Out of Type Erasure
 
 ### Fast Processing for ASCII-based Protocols
