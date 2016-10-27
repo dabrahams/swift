@@ -161,10 +161,6 @@ operation to worst-case O(N).  The change in complexity is not a great concern
 because N is typically very small, but it reflects fundamental changes in how
 the breaking algorithm works, and we need to update `String` to account for it.
 
-### Unicode 9
-
-### Emoji Support
-
 ### Substrings “Leak” Memory
 
 Slicing a `String` produces a new `String` that keeps the entire original
@@ -172,14 +168,45 @@ alive. This arrangement has proven to be problematic in other programming
 languages, because applications sometimes extract small strings from large ones
 and keep those small strings long-term.
 
-### Subdstrings Have 
-### Opting Out of Type Erasure
+### String's Representation Doesn't Use Storage Well
 
-### Fast Processing for ASCII-based Protocols
+For most strings in most applications, the big efficiency win comes from
+efficient storage.  However,
 
-### Representational Optimizations
+* We fail to take advantage of the small string optimization (what Cocoa does
+  with tagged pointers).
+* `String`s whose characters fall outside ASCII but within Latin-1 waste one byte
+  of storage per unicode scalar; Latin-1 strings can be stored as sequences of
+  8-bit units.
+* `MemoryLayout<String>.size` is 3 words when it should be at most 64 bits.  64
+  bits is enough to store many strings inline and works well for out-of-line
+  storage.
 
-Today there is no way to efficiently process text with a known encoding and layout
+### There's No Way to Opt Out of Type Erasure
+
+As noted above, many strings are short enough to store in 64 bits, many can be
+stored using only 8 bits per unicode scalar, others are best encoded in UTF-16,
+and some come to us already in some other encoding, such as UTF-8, that would be
+costly to translate.  Supporting these formats while maintaining usability for
+general-purpose APIs demands that a single String type can be backed by many
+different representations, as it is today.
+
+That said, the highest performance code always requires static knowledge of the
+data structures on which it operates, and for this code, dynamic representation
+selection comes at too high a cost.  Heavy-duty text processing demands a way to
+opt out of dynamism and directly use known String encodings.  Having this
+ability can also make it easy to cleanly specialize code that handles dynamic
+cases for maximal efficiency on the most common representations.
+
+### No Direct Support for Parsing ASCII Structure
+
+Although many machine-readable formats support the inclusion of arbitrary
+Unicode text, it is also common that their fundamental structure lies entirely
+within the ASCII subset (JSON, YAML, many XML formats).  These formats are often
+processed most efficiently by recognizing ASCII structural elements as ASCII,
+and capturing the arbitrary sections between them in more-general strings.  The
+current String API offers no way to efficiently recognize ASCII without the
+overhead of full decoding into unicode scalars and skip past everything else.
 
 <!-- Local Variables: -->
 <!-- eval: (buffer-face-mode 1) -->
