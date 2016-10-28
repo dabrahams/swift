@@ -72,7 +72,7 @@ as
 one should not need to import anything to, for example, do case-insensitive
 comparison.
 
-### Strings Don't Really Have Elements
+### Strings Shouldn't Really Have Elements
 
 A `String` does not act like a `Collection` of anything:
 
@@ -109,7 +109,7 @@ rare means the bug is unlikely to be caught in testing.
   titled
   [We Don't Implement Comparison Correctly](#we-dont-implement-comparison-correctly).
 
-### String Lacks APIs For Scanning, Matching, and Tokenization
+### String Lacks Swifty APIs For Scanning, Matching, and Tokenization
 
 As though it wasn't bad enough that we expose and promote a tempting collection
 of `Characters` that people will use to probe string contents, we also *fail* to
@@ -117,6 +117,46 @@ provide convenient alternative APIs that are correct for that purpose.  For
 example, it should be easy to cleanly express, “if this string starts with
 `"f"`, process the rest of the string as follows…”  Swift is well-suited to
 expressing this common pattern beautifully; we just need to add the APIs.
+
+### Slicing Operations are not Syntactically/Semantically Unified
+
+Creating substrings is a basic part of String processing, but the slicing
+operations that we have in Swift are all over the map: 
+  * Slices with two explicit endpoints are done with subscript, and support in-place
+    mutation:
+    
+    ```swift
+        s[i..<j].mutate()
+    ```
+    
+  * Slicing from an index to the end, or from the start to an index, is done
+    with a method and does not support in-place mutation:
+
+    ```swift
+        s.prefix(upTo: i).readOnly()
+    ```
+
+### String Views Cannot Consume One Anothers' Indices
+
+### Regular Expression Support Could Be Better
+
+This is out of scope for Swift 4, but it is important, and we can lay the right foundation.
+
+### Printf-Style Formatting Cryptic, Not Statically Typesafe
+
+* FIXME: How far do we want to go in talking about formatting?
+
+### String Interpolation is Inadequate
+
+* FIXME: Look at radar to re-discover the reasons we think so
+
+### C String Interop is Patchy
+
+* FIXME: look for "cstring" in our APIs to find the details.
+
+### Text Streaming APIs Exist, but are UnderExposed
+
+* FIXME: do we want to talk about this?
 
 ### Correct Internationalization is Too Hard
 
