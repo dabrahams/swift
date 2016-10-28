@@ -188,7 +188,35 @@ https://bugs.swift.org/browse/SR-1260
 
 ### C String Interop is Patchy
 
-* FIXME: look for "cstring" in our APIs to find the details.
+Our support for interoperation with C strings consists of the following `String` APIs
+
+```swift
+// These deal in arrays of CChar (a.k.a. Int8)
+init(cString: UnsafePointer<CChar>)
+
+init?(validatingUTF8 cString: UnsafePointer<CChar>)
+
+func withCString<Result>(
+    _ body: (UnsafePointer<Int8>) throws -> Result
+  ) rethrows -> Result
+
+var utf8CString: ContiguousArray<CChar>
+
+// 
+init(cString: UnsafePointer<UInt8>)
+
+static func decodeCString<Encoding : UnicodeCodec>(
+    _ cString: UnsafePointer<Encoding.CodeUnit>?,
+    as encoding: Encoding.Type,
+    repairingInvalidCodeUnits isRepairing: Bool = true)
+      -> (result: String, repairsMade: Bool)?
+```
+
+Because `UTF8.CodeUnit` is unsigned but `CChar`/`Int8` is signed, there is an
+impedance mismatch.  We've been inconsistent about trying to resolve that
+mismatch, and we need a policy.
+
+* FIXME: I feel like there must be other problems that I'm forgetting.  Is that all?
 
 ### Text Streaming APIs Exist, but are UnderExposed
 
