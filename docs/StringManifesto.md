@@ -1,8 +1,7 @@
 # String Processing For Swift 4
 
 The goal of re-evaluating Strings for Swift 4 has been fairly ill-defined thus
-fair, with just this short blurb in
-the
+far, with just this short blurb in the
 [list of goals](https://lists.swift.org/pipermail/swift-evolution/Week-of-Mon-20160725/025676.html):
 
 > **String re-evaluation**: String is one of the most important fundamental
@@ -23,8 +22,9 @@ For Swift 4 we want to improve three dimensions of String and Text processing:
 It's worth noting that ergonomics and correctness are mutually-reinforcing.  A
 well-designed API is easy to use correctly and hard to use incorrectly.  An API
 that is easy to use—but incorrectly—should not be considered an ergonomic
-success.  Making it possible to acheive optimal performance without compromising
-ergonomics or correctness is more of a challenge.
+success.  Conversely, an API that's simply hard to use is also hard to use
+correctly.  Making it possible to acheive optimal performance without
+compromising ergonomics or correctness is more of a challenge.
 
 ## Issues With Today's String Design
 
@@ -32,7 +32,22 @@ ergonomics or correctness is more of a challenge.
 
 What does this API do?  When should I use it?  Answers to these questions should
 be plainly obvious for APIs of primary data types, but `String` fails that test.
-It currently has 205 APIs. I've broken them down into Standard Library and
+
+To take a simple example, if you want to compare two strings for equality, there
+are at least the following choices:
+  1. `s1 == s2`
+  2. `s1.compare(s2)`
+  3. `s1.compare(s2, options: [], locale: nil)`
+  4. `s1.compare(s2, options: [], locale: Locale(identifier: ""))`
+  5. `s1.localizedStandardCompare(s2)`
+
+This list does not exaggerate the problem.  The standard library itself
+implements `==` with intended behavior approximately matching that of #4, but—due
+to the complexity of the API and lack of specific documentation—ended up with
+behavior matching #2 and #3.  Anyone processing human-readable text, though,
+should use #5, which is why it is included.
+
+String currently has 205 APIs. I've broken them down into Standard Library and
 Foundation, simply to show that both contribute significantly to overall
 complexity:
 
@@ -65,9 +80,8 @@ reason* we should present an API that's easy to grasp.
 
 While `String` is available to all programs out-of-the-box, crucial APIs for
 basic string processing tasks are still inaccessible until `Foundation` is
-imported.  While it makes sense that `Foundation` is needed for esoteric jobs
-such
-as
+imported.  While it makes sense that `Foundation` is needed for domain-specific
+jobs such as
 [linguistic tagging](https://developer.apple.com/reference/foundation/nslinguistictagger),
 one should not need to import anything to, for example, do case-insensitive
 comparison.
@@ -104,6 +118,10 @@ characters (e.g., `"\u{2024}\u{2024}"` and `"\u{2025}"`), processing one
 character at a time is almost always a bug, and the fact that such cases are
 rare means the bug is unlikely to be caught in testing.
 
+The right model for `String` is more like a roll of cookie dough with some rocks
+hidden in it: a continuous thing that can be sliced into shorter things, but
+only in certain places, and with no discernable unit of subdivision.
+
 - Note: Today, `String` *may appear* to act like a `Collection` of `Character`s (but
   not a `RangeReplaceableCollection`) because of a bug (see the section
   titled
@@ -136,19 +154,37 @@ operations that we have in Swift are all over the map:
         s.prefix(upTo: i).readOnly()
     ```
 
-### String Views Cannot Consume One Anothers' Indices
+### Index Translation is a Fact of Life
 
-### Regular Expression Support Could Be Better
+There are two aspects to this problem:
 
-This is out of scope for Swift 4, but it is important, and we can lay the right foundation.
+  1. `String` views cannot consume one anothers' indices without an explicit
+    conversion step.  An index into a `String`'s `characters` must be translated
+    before it can be used as a position in its `unicodeScalars`.  Although these
+    translations are rarely needed, they add conceptual and API complexity.
+  2. Many APIs in the core libraries and other frameworks still expose `String`
+    positions as `Int`s and regions as `NSRange`s, which can only reference its
+    `utf16` view and interoperate poorly with `String` itself.
 
-### Printf-Style Formatting Cryptic, Not Statically Typesafe
+### Regular Expressions Should Have Compile-Time Support
 
-* FIXME: How far do we want to go in talking about formatting?
+Literal regular expressions (as opposed to ones that are fully
+dynamically-constructed from `String`s) should be syntax-checked at compile time
+and should benefit from optimizations on that basis.  There are both language-
+and library- level solutions to this problem, and while addressing it is out of
+scope for Swift 4, it is important that we lay the foundations necessary to
+support it.
+
+### Printf-Style Formatting is Cryptic, Not Statically Typesafe
 
 ### String Interpolation is Inadequate
 
-* FIXME: Look at radar to re-discover the reasons we think so
+<rdar://problem/17273679> String interpolation doesn't work with localized strings
+
+<rdar://problem/18681780> Swift StringInterpolationConvertible should differentiate between base string and string segments
+https://bugs.swift.org/browse/SR-1260
+
+<rdar://problem/26711765> string interpolation needs syntax for invoking localizedStringWithFormat
 
 ### C String Interop is Patchy
 
@@ -214,7 +250,7 @@ For most strings in most applications, the big efficiency win comes from
 efficient storage.  However,
 
 * We fail to take advantage of the small string optimization (what Cocoa does
-  with tagged pointers).
+  with tagged pointers), which is both a storage and a performance optimization.
 * `String`s whose characters fall outside ASCII but within Latin-1 waste one byte
   of storage per unicode scalar; Latin-1 strings can be stored as sequences of
   8-bit units.
@@ -245,8 +281,8 @@ Unicode text, it is also common that their fundamental structure lies entirely
 within the ASCII subset (JSON, YAML, many XML formats).  These formats are often
 processed most efficiently by recognizing ASCII structural elements as ASCII,
 and capturing the arbitrary sections between them in more-general strings.  The
-current String API offers no way to efficiently recognize ASCII without the
-overhead of full decoding into unicode scalars and skip past everything else.
+current String API offers no way to efficiently recognize ASCII and skip past
+everything else without the overhead of full decoding into unicode scalars .
 
 <!-- Local Variables: -->
 <!-- eval: (buffer-face-mode 1) -->
