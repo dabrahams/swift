@@ -175,7 +175,19 @@ and library- level solutions to this problem, and while addressing it is out of
 scope for Swift 4, it is important that we lay the foundations necessary to
 support it.
 
-### Printf-Style Formatting is Cryptic, Not Statically Typesafe
+### Foundation Formatters Hard to Use
+
+Stateful properties on the formatter are unwieldy
+
+Shouldn't need to create an object just to format
+
+You need to match a formatter type up with the thing being formatted
+
+Having Text says use localized form.
+
+Create Number formatter
+Set the currency
+format the number
 
 ### String Interpolation is Inadequate
 
@@ -185,6 +197,8 @@ support it.
 https://bugs.swift.org/browse/SR-1260
 
 <rdar://problem/26711765> string interpolation needs syntax for invoking localizedStringWithFormat
+
+### Printf-Style Formatting is Cryptic, Not Statically Typesafe
 
 ### C String Interop is Patchy
 
