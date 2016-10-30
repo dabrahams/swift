@@ -206,14 +206,17 @@ These may seem like small issues, but the experience of Apple localization
 experts is that the total drag of these factors on programmers is such that they
 tend to reach for `String.format` instead.
 
-### String Interpolation is Inadequate
+### String Interpolation APIs are Too Limited
 
-<rdar://problem/17273679> String interpolation doesn't work with localized strings
+Swift string interpolation provides a beautiful alternative to printf's cryptic
+domain-specific language (just write ordinary swift code!) and its type safety
+problems (put the data right where it belongs!) but the following issues prevent
+it from being useful for localized formatting (among other jobs).
 
-<rdar://problem/18681780> Swift StringInterpolationConvertible should differentiate between base string and string segments
-https://bugs.swift.org/browse/SR-1260
-
-<rdar://problem/26711765> string interpolation needs syntax for invoking localizedStringWithFormat
+  * [SR-2303](https://bugs.swift.org/browse/SR-2303) We are unable to restrict
+    types used in string interpolation.
+  * [SR-1260](https://bugs.swift.org/browse/SR-1260) String interpolation can't
+    distinguish (fragments of) the base string from the string substitutions.
 
 ### C String Interop is Patchy
 
@@ -246,10 +249,6 @@ impedance mismatch.  We've been inconsistent about trying to resolve that
 mismatch, and we need a policy.
 
 * FIXME: I feel like there must be other problems that I'm forgetting.  Is that all?
-
-### Text Streaming APIs Exist, but are UnderExposed
-
-* FIXME: do we want to talk about this?
 
 ### Correct Internationalization is Too Hard
 
@@ -343,7 +342,21 @@ everything else without the overhead of full decoding into unicode scalars .
 
 ## Open Questions
 
-* Do we need the push-style `TextOutputStream` API?
+* Do we need the `TextOutputStream` API?  It is optimized for formatting
+  directly into a destination without the creation of intermediate strings
+  and/or string storage, and without the cost of type erasure imposed by
+  trafficking in string directly.  If we have a `StringProtocol`, in principle
+  `TextOutputStream` and `TextOutputStreamable` might be avoided by creating
+  models of that protocol that store the things being formatted.  An example of
+  what I'm describing can be seen
+  in
+  [this example](https://github.com/apple/swift/blob/cc3947066f24d3abc32cfe4fc55ac05ba44db796/test/Prototypes/TextFormatting.swift/#L175)),
+  but of course that uses `TextOutputStreamable`'s API, which “pushes” text into
+  a `TextOutputStream`.  Modeling it as a `StringProtocol` instance would
+  effectively mean exposing a `Collection` of `UnicodeScalar`s that would be
+  “pulled” from.  I'm not sure whether that can be as effectively optimized,
+  especially while the language has no native inversion-of-control (e.g. `yield`)
+  mechanism.
 
 <!-- Local Variables: -->
 <!-- eval: (buffer-face-mode 1) -->
