@@ -175,19 +175,36 @@ and library- level solutions to this problem, and while addressing it is out of
 scope for Swift 4, it is important that we lay the foundations necessary to
 support it.
 
-### Foundation Formatters Hard to Use
+### Printf-Style Formatting is Cryptic, Not Extensible, Not Statically Typesafe
 
-Stateful properties on the formatter are unwieldy
+`String.format` is designed on the `printf` model: it takes a format string with
+textual placeholders for substitution, and an arbitrary list of other arguments.
+The syntax and meaning of these placeholders has a long history in
+C, but for anyone who doesn't use them regularly they are cryptic and complex,
+as the `printf (3)` man page attests.
 
-Shouldn't need to create an object just to format
+Aside from complexity, this style of API has two major problems: First, the
+spelling of these placeholders must match up to the types of the arguments, in
+the right order, or the behavior is undefined.  Some limited support for
+compile-time checking of this correspondence could be implemented, but only for
+the cases where the format string is a literal. Second, there's no reasonable
+way to extend the formatting vocabulary to cover the needs of new types: you are
+stuck with what's in the box.
 
-You need to match a formatter type up with the thing being formatted
+### Foundation Formatters Unweildy, Verbose
 
-Having Text says use localized form.
+The design pattern used by the core Foundation formatters demands more from
+users than it should:
+  * Matching the type of data being formatted to a formatter type
+  * Creating an instance of that type
+  * Setting stateful properties (`currency`, `dateStyle`) on the type that
+    prevent the instance from being used and discarded in the same expression
+    where it is created.
+  * Overall, introduction of needless verbosity into source
 
-Create Number formatter
-Set the currency
-format the number
+These may seem like small issues, but the experience of Apple localization
+experts is that the total drag of these factors on programmers is such that they
+tend to reach for `String.format` instead.
 
 ### String Interpolation is Inadequate
 
@@ -197,8 +214,6 @@ format the number
 https://bugs.swift.org/browse/SR-1260
 
 <rdar://problem/26711765> string interpolation needs syntax for invoking localizedStringWithFormat
-
-### Printf-Style Formatting is Cryptic, Not Statically Typesafe
 
 ### C String Interop is Patchy
 
@@ -325,6 +340,10 @@ processed most efficiently by recognizing ASCII structural elements as ASCII,
 and capturing the arbitrary sections between them in more-general strings.  The
 current String API offers no way to efficiently recognize ASCII and skip past
 everything else without the overhead of full decoding into unicode scalars .
+
+## Open Questions
+
+* Do we need the push-style `TextOutputStream` API?
 
 <!-- Local Variables: -->
 <!-- eval: (buffer-face-mode 1) -->
