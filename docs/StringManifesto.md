@@ -197,9 +197,9 @@ The design pattern used by the core Foundation formatters demands more from
 users than it should:
   * Matching the type of data being formatted to a formatter type
   * Creating an instance of that type
-  * Setting stateful properties (`currency`, `dateStyle`) on the type that
-    prevent the instance from being used and discarded in the same expression
-    where it is created.
+  * Setting stateful options (`currency`, `dateStyle`) on the type.  Note: the
+    need for this step prevents the instance from being used and discarded in
+    the same expression where it is created.
   * Overall, introduction of needless verbosity into source
 
 These may seem like small issues, but the experience of Apple localization
