@@ -34,6 +34,7 @@ be plainly obvious for APIs of primary data types, but `String` fails that test.
 
 To take a simple example, if you want to compare two strings for equality, there
 are at least the following choices:
+
   1. `s1 == s2`
   2. `s1.compare(s2)`
   3. `s1.compare(s2, options: [], locale: nil)`
@@ -50,22 +51,22 @@ String currently has 205 APIs. I've broken them down into Standard Library and
 Foundation, simply to show that both contribute significantly to overall
 complexity:
 
-| **Source** | `init` | `func` | `subscript` | `var` |
-|--------------|----|----|---|----|
-| Standard Library | 41 | 42 | 9 | 26 |
-|Foundation | 18 | 55 | 0 | 14 |
+**Source** | `init` | `func` | `subscript` | `var`
+---|---
+Standard Library | 41 | 42 | 9 | 26
+Foundation | 18 | 55 | 0 | 14
 
 Method arity lines up as follows:
 
-| **Arity** | **Standard Library** | **Foundation** |
-|---|---|---|
-| 0: `ƒ()` | 5 | 7 |
-| 1: `ƒ(:)` | 19 | 48 |
-| 2: `ƒ(::)` | 13 | 19 |
-| 3: `ƒ(:::)` | 5 | 11 |
-| 4: `ƒ(::::)` | 1 | 7 |
-| 5: `ƒ(:::::)` | - | 2 |
-| 6: `ƒ(::::::)` | - | 1 |
+**Arity** | **Standard Library** | **Foundation**
+---|---
+0: `ƒ()` | 5 | 7 |
+1: `ƒ(:)` | 19 | 48 |
+2: `ƒ(::)` | 13 | 19 |
+3: `ƒ(:::)` | 5 | 11 |
+4: `ƒ(::::)` | 1 | 7 |
+5: `ƒ(:::::)` | - | 2 |
+6: `ƒ(::::::)` | - | 1 |
 
 I consider this unacceptable. By contrast, `Int` in Swift 3.0 (*predating* the
 new integers proposal that will eliminate much of its API surface area) has 80
@@ -139,16 +140,15 @@ expressing this common pattern beautifully; we just need to add the APIs.
 
 Creating substrings is a basic part of String processing, but the slicing
 operations that we have in Swift are all over the map: 
+
   * Slices with two explicit endpoints are done with subscript, and support in-place
     mutation:
-    
     ```swift
         s[i..<j].mutate()
     ```
-    
+
   * Slicing from an index to the end, or from the start to an index, is done
     with a method and does not support in-place mutation:
-
     ```swift
         s.prefix(upTo: i).readOnly()
     ```
@@ -356,48 +356,92 @@ issues:
 
 **Legend**:  ✅ = Keep, ❌ = Discard, ↗️ = Transplant,⛏️= Redesign, ❓= TBD
  
+### C String Interop
 
 **API** | **Suggested Disposition**
-:-------- | :-------
-`init()` | ✅
-`init(_: Character)` | ❌Eliminate along with `Character`
------------------------------- | ------------------------------
+---|---
 `init(cString: UnsafePointer<CChar>)` | ❓we should do something about CChar-vs-UInt8
 `init(cString: UnsafePointer<UInt8>)` | ❓
 `init?(validatingUTF8: UnsafePointer<CChar>)` | ❓probably OK
 `static func decodeCString<Encoding : UnicodeCodec>(`<br/>`  _: UnsafePointer<Encoding.CodeUnit>?,`<br/>`  as: Encoding.Type,`<br/>`  repairingInvalidCodeUnits: Bool = default`<br/>`) -> (result: String, repairsMade: Bool)?` | ✅Would be an init except for repairsMade
 `func withCString<Result>(`<br/>`  _: (UnsafePointer<Int8>) throws -> Result`<br/>`) rethrows -> Result` |❓
 `var utf8CString: ContiguousArray<CChar>` | ❓Reevaluate all CString APIs
------------------------------- | ------------------------------
-`var customMirror: Mirror` |❓
+`func getCString(`<br/>`  _: inout [CChar],`<br/>`  maxLength: Int,`<br/>`  encoding: String.Encoding) -> Bool` |❓
+`func cString(using: String.Encoding) -> [CChar]?` | ↗️e.cString(s)
+`init?(cString: UnsafePointer<CChar>, encoding: String.Encoding)` |❓
+
+### Miscellaneous
+
+**API** | **Suggested Disposition**
+:-------- | :-------
+`init()` | ✅
+`var customMirror: Mirror` |✅
 `var customPlaygroundQuickLook: PlaygroundQuickLook` | ↗️Move CustomPlaygroundQuickLookable to PlaygroundSupport library
------------------------------- | ------------------------------
-`mutating func write(_: String)` | ❓Rethink `TextOutputStreamable`/`TextOutputStream`
+
+### `Character` Data Type Support
+
+**API** | **Suggested Disposition**
+:-------- | :-------
+`init(_: Character)` | ❌
+`mutating func append(_: Character)` | ❌
+`init(extendedGraphemeClusterLiteral: String)` |❌
+`typealias ExtendedGraphemeClusterLiteralType = String` |❌
+
+### `TextOutputStreamable` and `TextOutputStream` Support
+
+**API** | **Suggested Disposition**
+---|---
+`mutating func write(_: String)` | 
 `func write<Target : TextOutputStream>(to: inout Target)` |❓
------------------------------- | ------------------------------
+
+### Views
+
+**API** | **Suggested Disposition**
+---|---
+`var utf8: UTF8View`|✅
+`var utf16: UTF16View`|✅
+`var unicodeScalars: UnicodeScalarView`|✅
+`var characters: CharacterView` |✅
+`struct UTF8View` | ✅
+`struct UTF16View` |✅
+`struct UnicodeScalarView` |✅
 `struct CharacterView` | ✅
-`var characters: String.CharacterView` |❓
+`typealias UTF16Index =`…  |❌Obsoleted by index unification
+`typealias UTF8Index =`… |❌Obsoleted by index unification
+`typealias UnicodeScalarIndex =`… |❌Obsoleted by index unification
+
+### XXX
+
+**API** | **Suggested Disposition**
+---|---
 `init(_: String)` | ? - Should be resolved the same way as other "copy initializers" for value types
-`mutating func withMutableCharacters<R>(`<br/>`  _: (inout String.CharacterView) -> R) -> R` | ❌ An optimization obsoleted by better `inout` support with borrows
-`init(_: String.CharacterView)` | ❓this is not strictly needed; we can assign to the `characters` of an empty string
-`init(unicodeScalarLiteral: String)` |❓
-`typealias UnicodeScalarLiteralType = String` |❓
-`init(extendedGraphemeClusterLiteral: String)` |❓
-`typealias ExtendedGraphemeClusterLiteralType = String` |❓
-`init(stringLiteral: String)` |❓
-`typealias StringLiteralType = String` |❓
-`var debugDescription: String` |❓
+`mutating func withMutableCharacters<R>(`<br/>`  _: (inout String.CharacterView) -> R) -> R` | ❌ Supported for efficiency reasons; expected to be obsoleted by better `inout` support with borrows.
+`init(_: String.CharacterView)` | ❓this is not strictly needed; we can assign to the `characters` of an empty string.  We can also do `characters.joined(separator: "")` if the elements are `String`s.
 `static func <(lhs: String, rhs: String) -> Bool` |❓
 `var hashValue: Int` |❓
-`func lowercased() -> String` |❓
-`func uppercased() -> String` |❓
-`init<T : LosslessStringConvertible>(_: T)` |❓
+`func lowercased() -> String` |✅
+`func uppercased() -> String` |✅
+`init<T : LosslessStringConvertible>(_: T)` |✅
+`init?(_: String)` |❓Why do we have this?
+
+### Formatting
+`var debugDescription: String` |❓
 `var description: String` |❓
-`init?(_: String)` |❓
------------------------------- | ------------------------------
+
+### Literal Convertibility
+
+`init(unicodeScalarLiteral: String)` |❓
+`typealias UnicodeScalarLiteralType = String` |❓
+`init(stringLiteral: String)` |❓
+`typealias StringLiteralType = String` |❓
+
+### Interpolation
+
+**API** | **Suggested Disposition**
+---|---
 `init(stringInterpolation: String...)` | ? String interpolation needs a redesign
 `init<T>(stringInterpolationSegment: T)` | ?
-`init(stringInterpolationSegment: String)` | ❌The rest of these are optimizations that rely on compiler magic.  They should at *least* be hidden from users.
+`init(stringInterpolationSegment: String)` | ❌The rest of these are part an optimization that relies on compiler magic, and should at *least* be hidden from users.
 `init(stringInterpolationSegment: Character)` |  ❌
 `init(stringInterpolationSegment: UnicodeScalar)` |  ❌
 `init(stringInterpolationSegment: Bool)` |   ❌
@@ -413,25 +457,35 @@ issues:
 `init(stringInterpolationSegment: Int64)` |   ❌
 `init(stringInterpolationSegment: UInt)` |   ❌
 `init(stringInterpolationSegment: Int)` |   ❌
------------------------------- | ------------------------------
+
+**API** | **Suggested Disposition**
+---|---
 `init(repeating: String, count: Int)` | ✅ Slightly useful
 `typealias Index = String.CharacterView.Index` |❓
-`typealias IndexDistance = ...` | ❌can't count elements on a roll of cookie dough
 `var startIndex: String.Index` |❓
 `var endIndex: String.Index` |❓
+
+### Obsoleted Because String Is Not a Collection
+
+**API** | **Suggested Disposition**
+---|---
+`typealias IndexDistance = ...` | ❌can't count elements on a roll of cookie dough
 `func index(after: String.Index) -> String.Index` | ❌️The following should die
-`func index(before: String.Index) -> String.Index` |❓
-`func index(`<br/>`  _: String.Index,`<br/>`  offsetBy: String.IndexDistance) -> String.Index` |❓
-`func index(`<br/>`  _: String.Index,`<br/>`  offsetBy: String.IndexDistance,`<br/>`  limitedBy: String.Index) -> String.Index?` |❓
-`func distance(`<br/>`  from: String.Index, to: String.Index) -> String.IndexDistance` |❓
-`subscript(i: String.Index) -> Character` |❓
+`func index(before: String.Index) -> String.Index` |❌
+`func index(`<br/>`  _: String.Index,`<br/>`  offsetBy: String.IndexDistance) -> String.Index` |❌
+`func index(`<br/>`  _: String.Index,`<br/>`  offsetBy: String.IndexDistance,`<br/>`  limitedBy: String.Index) -> String.Index?` |❌
+`func distance(`<br/>`  from: String.Index, to: String.Index) -> String.IndexDistance` |❌
+`subscript(i: String.Index) -> Character` |❌
+
+
+**API** | **Suggested Disposition**
+---|---
 `subscript(bounds: Range<String.Index>) -> String` | Keep these
 `subscript(bounds: ClosedRange<String.Index>) -> String` |❓
 `init<S : Sequence where S.Iterator.Element == Character>(_: S)` |❓
-`mutating func reserveCapacity(_: Int)` |❓
-`mutating func append(_: Character)` | ❓Append String content
+`mutating func reserveCapacity(_: Int)` |⛏️At least rename this; it can only reserve ASCII capacity today.  Probably this should be on the UnicodeScalars.
 `mutating func append<`<br/>`  S : Sequence where S.Iterator.Element == Character`<br/>`  >(contentsOf: S)` |❓
-`mutating func replaceSubrange<`<br/>`  C where C : Collection, C.Iterator.Element == Character`<br/>`>(_: Range<String.Index>, with: C)` | ❌️Drop all the Character-based APIs
+`mutating func replaceSubrange<`<br/>`  C where C : Collection, C.Iterator.Element == Character`<br/>`>(_: Range<String.Index>, with: C)` | ⛏️This is still Character-based APIs
 `mutating func replaceSubrange(`<br/>`  _: Range<String.Index>, with: String)` |❓
 `mutating func replaceSubrange<`<br/>`  C where C : Collection, C.Iterator.Element == Character`<br/>`>(`<br/>`  _: ClosedRange<String.Index>, with: C)` |❓
 `mutating func replaceSubrange(_: ClosedRange<String.Index>, with: String)` |❓
@@ -441,11 +495,6 @@ issues:
 `mutating func removeSubrange(_: Range<String.Index>)` | Cosolidate ranges under a protocol
 `mutating func removeSubrange(_: ClosedRange<String.Index>)` |❓
 `mutating func removeAll(keepingCapacity: Bool = default)` |❓
-`struct UnicodeScalarView` |❓
-`var unicodeScalars: String.UnicodeScalarView` |❓
-`struct UTF16View` |❓
-`typealias UTF16Index = String.UTF16View.Index` |❓
-`struct UTF8View` |❓
 `init<Subject>(describing: Subject)` |❓
 `init<Subject>(reflecting: Subject)` |❓
 `static var defaultCStringEncoding: String.Encoding` | ↗️Move these onto StringEncoding (UnicodeEncoding?)
@@ -462,7 +511,6 @@ issues:
 `func completePath(`<br/>`  into: UnsafeMutablePointer<String>? = default,`<br/>`  caseSensitive: Bool,`<br/>`  matchesInto: UnsafeMutablePointer<[String]>? = default,`<br/>`  filterTypes: [String]? = default`<br/>`) -> Int` | ↗️Transplant
 `func components(`<br/>`  separatedBy: Foundation.CharacterSet`<br/>`) -> [String]` | Split
 `func components(separatedBy: String) -> [String]` |❓
-`func cString(using: String.Encoding) -> [CChar]?` | ↗️e.cString(s)
 `func data(`<br/>`  using: String.Encoding,`<br/>`  allowLossyConversion: Bool = default`<br/>`) -> Foundation.Data?` | ↗️Should be a failable `Data.init`
 ------------------------------ | ------------------------------
 `var decomposedStringWithCanonicalMapping: String` | ❓Undecided
@@ -476,7 +524,6 @@ issues:
 `func enumerateLinguisticTags(`<br/>`  in: Range<String.Index>,`<br/>`  scheme: String,`<br/>`  options: Foundation.NSLinguisticTagger.Options = default,`<br/>`  orthography: Foundation.NSOrthography? = default,`<br/>`  invoking: (String,`<br/>`  Range<String.Index>,`<br/>`  Range<String.Index>, inout Bool) -> ())` | ❓LinguisticTagger
  `var fastestEncoding: String.Encoding` | ↗️StringEncoding init
 `func getBytes(`<br/>`  _: inout [UInt8],`<br/>`  maxLength: Int,`<br/>`  usedLength: UnsafeMutablePointer<Int>,`<br/>`  encoding: String.Encoding,`<br/>`  options: String.EncodingConversionOptions = default,`<br/>`  range: Range<String.Index>,`<br/>`  remaining: UnsafeMutablePointer<Range<String.Index>>) -> Bool` | ❓Encoding/Decoding
-`func getCString(`<br/>`  _: inout [CChar],`<br/>`  maxLength: Int,`<br/>`  encoding: String.Encoding) -> Bool` |❓
 `init?<`<br/>`  S : Sequence where S.Iterator.Element == UInt8`<br/>`  >(bytes: S, encoding: String.Encoding)` |❓
 `init?(`<br/>`  bytesNoCopy: UnsafeMutableRawPointer,`<br/>`  length: Int,`<br/>`  encoding: String.Encoding,`<br/>`  freeWhenDone: Bool)` |❓
 `init(`<br/>`  utf16CodeUnits: UnsafePointer<Foundation.unichar>,`<br/>`  count: Int)` |❓
@@ -488,7 +535,6 @@ issues:
 `init(`<br/>`  contentsOf: Foundation.URL,`<br/>`  encoding: String.Encoding) throws` |❓
 `init(`<br/>`  contentsOf: Foundation.URL,`<br/>`  usedEncoding: inout String.Encoding`<br/>`) throws` |❓
 `init(contentsOf: Foundation.URL) throws` |❓
-`init?(cString: UnsafePointer<CChar>, encoding: String.Encoding)` |❓
 `init?(data: Foundation.Data, encoding: String.Encoding)` |❓
 `init(format: String, _: CVarArg...)` |❓
 `init(format: String, arguments: [CVarArg])` |❓
@@ -565,6 +611,7 @@ in order to find out.
 
 * Should these be creating localized or non-localized representations?
 * Is returning a `String` efficient enough?
+* Is `debugDescription` pulling its weight?
 
 ### Naming, Again
 
