@@ -19,12 +19,11 @@ For Swift 4 we want to improve three dimensions of String and Text processing:
   2. Correctness
   3. Performance
 
-It's worth noting that ergonomics and correctness are mutually-reinforcing.  A
-well-designed API is easy to use correctly and hard to use incorrectly.  An API
-that is easy to use—but incorrectly—should not be considered an ergonomic
+It's worth noting that ergonomics and correctness are mutually-reinforcing.  An
+API that is easy to use—but incorrectly—cannot be considered an ergonomic
 success.  Conversely, an API that's simply hard to use is also hard to use
-correctly.  Making it possible to acheive optimal performance without
-compromising ergonomics or correctness is more of a challenge.
+correctly.  Acheiving optimal performance without compromising ergonomics or
+correctness is a greater challenge.
 
 ## Issues With Today's String Design
 
@@ -340,23 +339,236 @@ and capturing the arbitrary sections between them in more-general strings.  The
 current String API offers no way to efficiently recognize ASCII and skip past
 everything else without the overhead of full decoding into unicode scalars .
 
+## The Shape of a Solution
+
+### Reducing API Surface Area and Conceptual Complexity
+
+We can attack this problem on many fronts, often while dealing with other
+issues:
+
+  * **Drop `Character`** as a distinct data type.  There are no APIs whose
+    correctness depends on operating on single grapheme clusters as opposed to
+    longer strings.  A String's `.characters` can become a collection of
+    substrings.  We can also drop the
+    `ExpressibleByExtendedGraphemeClusterLiteral` protocol for the same reason.
+
+## Existing String API and Suggested Disposition
+
+| API | Suggested Disposition |
+|:---|:----|
+| `init()` | ✅ |
+| `init(_: Character)` | Eliminate along with `Character` |
+|---|---|
+| `init(cString: UnsafePointer<CChar>)` | we should do something about CChar-vs-UInt8 |
+| `init(cString: UnsafePointer<UInt8>)` |  |
+| `init?(validatingUTF8: UnsafePointer<CChar>)` | probably OK |
+| `static func decodeCString<Encoding : UnicodeCodec>(`<br/>`  _: UnsafePointer<Encoding.CodeUnit>?,`<br/>`  as: Encoding.Type,`<br/>`  repairingInvalidCodeUnits: Bool = default`<br/>`) -> (result: String, repairsMade: Bool)?` | Would be an init except for repairsMade |
+| `func withCString<Result>(`<br/>`  _: (UnsafePointer<Int8>) throws -> Result`<br/>`) rethrows -> Result` |  |
+| `var utf8CString: ContiguousArray<CChar>` | Reevaluate all CString APIs |
+|---|---|
+| `var customMirror: Mirror` |  |
+| `var customPlaygroundQuickLook: PlaygroundQuickLook` | Move CustomPlaygroundQuickLookable to Playground support library  |
+|---|---|
+| `mutating func write(_: String)` | Rethink `TextOutputStreamable`/`TextOutputStream` |
+| `func write<Target : TextOutputStream>(to: inout Target)` |  |
+|---|---|
+| `struct CharacterView` | ✅ |
+| `var characters: String.CharacterView` |  |
+| `init(_: String)` | ? - Should be resolved the same way as other "copy initializers" for value types  |
+| `mutating func withMutableCharacters<R>(_: (inout String.CharacterView) -> R) -> R` | ❌ An optimization obsoleted by better `inout` support with borrows |
+| `init(_: String.CharacterView)` | Unsure; this is not strictly needed; we can assign to the `characters` of an empty string  |
+| `init(unicodeScalarLiteral: String)` |  |
+| `typealias UnicodeScalarLiteralType = String` |  |
+| `init(extendedGraphemeClusterLiteral: String)` |  |
+| `typealias ExtendedGraphemeClusterLiteralType = String` |  |
+| `init(stringLiteral: String)` |  |
+| `typealias StringLiteralType = String` |  |
+| `var debugDescription: String` |  |
+| `static func <(lhs: String, rhs: String) -> Bool` |  |
+| `var hashValue: Int` |  |
+| `func lowercased() -> String` |  |
+| `func uppercased() -> String` |  |
+| `init<T : LosslessStringConvertible>(_: T)` |  |
+| `var description: String` |  |
+| `init?(_: String)` |  |
+|--------|----------|
+| `// String interpolation protocol needs a redesign.` |  |
+| `init(stringInterpolation: String...)` |  |
+| `init<T>(stringInterpolationSegment: T)` |  |
+| `init(stringInterpolationSegment: String)` | The following should all die |
+| `init(stringInterpolationSegment: Character)` |  |
+| `init(stringInterpolationSegment: UnicodeScalar)` |  |
+| `init(stringInterpolationSegment: Bool)` |  |
+| `init(stringInterpolationSegment: Float32)` |  |
+| `init(stringInterpolationSegment: Float64)` |  |
+| `init(stringInterpolationSegment: UInt8)` |  |
+| `init(stringInterpolationSegment: Int8)` |  |
+| `init(stringInterpolationSegment: UInt16)` |  |
+| `init(stringInterpolationSegment: Int16)` |  |
+| `init(stringInterpolationSegment: UInt32)` |  |
+| `init(stringInterpolationSegment: Int32)` |  |
+| `init(stringInterpolationSegment: UInt64)` |  |
+| `init(stringInterpolationSegment: Int64)` |  |
+| `init(stringInterpolationSegment: UInt)` |  |
+| `init(stringInterpolationSegment: Int)` |  |
+|--------|----------|
+| `init(repeating: String, count: Int)` | ✅ Slightly useful |
+| `typealias Index = String.CharacterView.Index` |  |
+| `typealias IndexDistance = String.CharacterView.IndexDistance` |  |
+| `var startIndex: String.Index` |  |
+| `var endIndex: String.Index` |  |
+| `func index(after: String.Index) -> String.Index` | The following should die |
+| `func index(before: String.Index) -> String.Index` |  |
+| `func index(_: String.Index, offsetBy: String.IndexDistance) -> String.Index` |  |
+| `func index(_: String.Index, offsetBy: String.IndexDistance, limitedBy: String.Index) -> String.Index?` |  |
+| `func distance(from: String.Index, to: String.Index) -> String.IndexDistance` |  |
+| `subscript(i: String.Index) -> Character` |  |
+| `subscript(bounds: Range<String.Index>) -> String` | Keep these |
+| `subscript(bounds: ClosedRange<String.Index>) -> String` |  |
+| `init<S : Sequence where S.Iterator.Element == Character>(_: S)` |  |
+| `mutating func reserveCapacity(_: Int)` |  |
+| `mutating func append(_: Character)` | Append String content |
+| `mutating func append<S : Sequence where S.Iterator.Element == Character>(contentsOf: S)` |  |
+| `mutating func replaceSubrange<C where C : Collection, C.Iterator.Element == Character>(_: Range<String.Index>, with: C)` | Drop all the Character-based APIs |
+| `mutating func replaceSubrange(_: Range<String.Index>, with: String)` |  |
+| `mutating func replaceSubrange<C where C : Collection, C.Iterator.Element == Character>(_: ClosedRange<String.Index>, with: C)` |  |
+| `mutating func replaceSubrange(_: ClosedRange<String.Index>, with: String)` |  |
+| `mutating func insert(_: Character, at: String.Index)` |  |
+| `mutating func insert<S : Collection where S.Iterator.Element == Character>(contentsOf: S, at: String.Index)` |  |
+| `@discardableResult mutating func remove(at: String.Index) -> Character` | Drop this |
+| `mutating func removeSubrange(_: Range<String.Index>)` | Cosolidate ranges under a protocol |
+| `mutating func removeSubrange(_: ClosedRange<String.Index>)` |  |
+| `mutating func removeAll(keepingCapacity: Bool = default)` |  |
+| `struct UnicodeScalarView : BidirectionalCollection, CustomStringConvertible, CustomDebugStringConvertible {` |  |
+| `var unicodeScalars: String.UnicodeScalarView` |  |
+| `struct UTF16View` |  |
+| `typealias UTF16Index = String.UTF16View.Index` |  |
+| `struct UTF8View : Collection, CustomStringConvertible, CustomDebugStringConvertible {}` |  |
+| `init<Subject>(describing: Subject)` |  |
+| `init<Subject>(reflecting: Subject)` |  |
+| `static var defaultCStringEncoding: String.Encoding` | Move these onto StringEncoding (UnicodeEncoding?) |
+| `static func localizedName(of: String.Encoding) -> String` |  |
+| `static func localizedStringWithFormat(` <br/>`  _: String, _: CVarArg...) -> String` | Kill off printf-style interface |
+| `init?(utf8String: UnsafePointer<CChar>)` | Duplicates init(cString:)? |
+| `func canBeConverted(to: String.Encoding) -> Bool` | Move to StringEncoding:  e.canRepresent(s) |
+| `var capitalized: String` |  |
+| `var localizedCapitalized: String` | Locales->Text |
+| `func capitalized(with: Foundation.Locale?) -> String` |  |
+| `func caseInsensitiveCompare(_: String) -> Foundation.ComparisonResult` |  |
+| `func commonPrefix(with: String, options: String.CompareOptions = default) -> String` | Replace with mismatch |
+| `func compare(_: String, options: String.CompareOptions = default, range: Range<String.Index>? = default, locale: Foundation.Locale? = default) -> Foundation.ComparisonResult` |  |
+| `func completePath(into: UnsafeMutablePointer<String>? = default, caseSensitive: Bool, matchesInto: UnsafeMutablePointer<[String]>? = default, filterTypes: [String]? = default) -> Int` | Transplant |
+| `func components(separatedBy: Foundation.CharacterSet) -> [String]` | Split |
+| `func components(separatedBy: String) -> [String]` |  |
+| `func cString(using: String.Encoding) -> [CChar]?` | e.cString(s) |
+| `func data(using: String.Encoding, allowLossyConversion: Bool = default) -> Foundation.Data?` | ❌Should be a failable `Data.init` |
+|----------|---------|
+| `var decomposedStringWithCanonicalMapping: String` | Undecided |
+| `var decomposedStringWithCompatibilityMapping: String` |  |
+| `var precomposedStringWithCanonicalMapping: String` |  |
+| `var precomposedStringWithCompatibilityMapping: String` |  |
+| `// Orthography; undecided.` |  |
+| `func enumerateLines(invoking: @escaping (String, inout Bool) -> ())` |  |  
+| `func getLineStart(_: UnsafeMutablePointer<String.Index>, end: UnsafeMutablePointer<String.Index>, contentsEnd: UnsafeMutablePointer<String.Index>, for: Range<String.Index>)` |  |
+| `func getParagraphStart(_: UnsafeMutablePointer<String.Index>, end: UnsafeMutablePointer<String.Index>, contentsEnd: UnsafeMutablePointer<String.Index>, for: Range<String.Index>)` |  |
+| `func enumerateSubstrings(in: Range<String.Index>, options: String.EnumerationOptions = default, _: @escaping (String?, Range<String.Index>, Range<String.Index>, inout Bool) -> ())` | Should be one or more collection/sequence properties |
+| `func enumerateLinguisticTags(in: Range<String.Index>, scheme: String, options: Foundation.NSLinguisticTagger.Options = default, orthography: Foundation.NSOrthography? = default, invoking: (String, Range<String.Index>, Range<String.Index>, inout Bool) -> ())` | LinguisticTagger |
+| `var fastestEncoding: String.Encoding` | StringEncoding init |  
+| `func getBytes(_: inout [UInt8], maxLength: Int, usedLength: UnsafeMutablePointer<Int>, encoding: String.Encoding, options: String.EncodingConversionOptions = default, range: Range<String.Index>, remaining: UnsafeMutablePointer<Range<String.Index>>) -> Bool` | Encoding/Decoding |
+| `func getCString(_: inout [CChar], maxLength: Int, encoding: String.Encoding) -> Bool` |  |
+| `init?<S : Sequence where S.Iterator.Element == UInt8>(bytes: S, encoding: String.Encoding)` |  |
+| `init?(bytesNoCopy: UnsafeMutableRawPointer, length: Int, encoding: String.Encoding, freeWhenDone: Bool)` |  |
+| `init(utf16CodeUnits: UnsafePointer<Foundation.unichar>, count: Int)` |  |
+| `var hash: Int` | We should kill off the incorrect == behavior and associated hash |
+| `init(utf16CodeUnitsNoCopy: UnsafePointer<Foundation.unichar>, count: Int, freeWhenDone: Bool)` |  |
+| `init(contentsOfFile: String, encoding: String.Encoding) throws` | Undecided, but definitely belongs elsewhere.  Why do we have path Strings |
+| `init(contentsOfFile: String, usedEncoding: inout String.Encoding) throws` |  |
+| `init(contentsOfFile: String) throws` |  |
+| `init(contentsOf: Foundation.URL, encoding: String.Encoding) throws` |  |
+| `init(contentsOf: Foundation.URL, usedEncoding: inout String.Encoding) throws` |  |
+| `init(contentsOf: Foundation.URL) throws` |  |
+| `init?(cString: UnsafePointer<CChar>, encoding: String.Encoding)` |  |
+| `init?(data: Foundation.Data, encoding: String.Encoding)` |  |
+| `init(format: String, _: CVarArg...)` |  |
+| `init(format: String, arguments: [CVarArg])` |  |
+| `init(format: String, locale: Foundation.Locale?, _: CVarArg...)` |  |
+| `init(format: String, locale: Foundation.Locale?, arguments: [CVarArg])` |  |
+| `func lengthOfBytes(using: String.Encoding) -> Int` |  |
+| `func lineRange(for: Range<String.Index>) -> Range<String.Index>` |  |
+| `func linguisticTags(in: Range<String.Index>, scheme: String, options: Foundation.NSLinguisticTagger.Options = default, orthography: Foundation.NSOrthography? = default, tokenRanges: UnsafeMutablePointer<[Range<String.Index>]>? = default) -> [String]` |  |
+| `func localizedCaseInsensitiveCompare(_: String) -> Foundation.ComparisonResult` |  |
+| `func localizedCompare(_: String) -> Foundation.ComparisonResult` |  |
+| `func localizedStandardCompare(_: String) -> Foundation.ComparisonResult` |  |
+| `var localizedLowercase: String` |  |
+| `func lowercased(with: Foundation.Locale?) -> String` |  |
+| `func maximumLengthOfBytes(using: String.Encoding) -> Int` |  |
+| `func paragraphRange(for: Range<String.Index>) -> Range<String.Index>` |  |
+| `func propertyList() -> Any` |  |
+| `func propertyListFromStringsFileFormat() -> [String : String]` |  |
+| `func rangeOfCharacter(from: Foundation.CharacterSet, options: String.CompareOptions = default, range: Range<String.Index>? = default) -> Range<String.Index>?` |  |
+| `func rangeOfComposedCharacterSequence(at: String.Index) -> Range<String.Index>` |  |
+| `func rangeOfComposedCharacterSequences(for: Range<String.Index>) -> Range<String.Index>` |  |
+| `func range(of: String, options: String.CompareOptions = default, range: Range<String.Index>? = default, locale: Foundation.Locale? = default) -> Range<String.Index>?` |  |
+| `func localizedStandardContains(_: String) -> Bool` |  |
+| `func localizedStandardRange(of: String) -> Range<String.Index>?` |  |
+| `var smallestEncoding: String.Encoding` |  |
+| `func addingPercentEncoding(withAllowedCharacters: Foundation.CharacterSet) -> String?` |  |
+| `func appendingFormat(_: String, _: CVarArg...) -> String` |  |
+| `func appending(_: String) -> String` |  |
+| `func folding(options: String.CompareOptions = default, locale: Foundation.Locale?) -> String` |  |
+| `func padding(toLength: Int, withPad: String, startingAt: Int) -> String` |  |
+| `var removingPercentEncoding: String?` |  |
+| `func replacingCharacters(in: Range<String.Index>, with: String) -> String` |  |
+| `func replacingOccurrences(of: String, with: String, options: String.CompareOptions = default, range: Range<String.Index>? = default) -> String` |  |
+| `func trimmingCharacters(in: Foundation.CharacterSet) -> String` |  |
+| `func substring(from: String.Index) -> String` |  |
+| `func substring(to: String.Index) -> String` |  |
+| `func substring(with: Range<String.Index>) -> String` |  |
+| `var localizedUppercase: String` |  |
+| `func uppercased(with: Foundation.Locale?) -> String` |  |
+| `func write(toFile: String, atomically: Bool, encoding: String.Encoding) throws` |  |
+| `func write(to: Foundation.URL, atomically: Bool, encoding: String.Encoding) throws` |  |
+| `func applyingTransform(_: Foundation.StringTransform, reverse: Bool) -> String?` |  |
+| `func contains(_: String) -> Bool` |  |
+| `func localizedCaseInsensitiveContains(_: String) -> Bool` |  |
+| `struct Encoding` |  |
+| `typealias EncodingConversionOptions = Foundation.NSString.EncodingConversionOptions` |  |
+| `typealias EnumerationOptions = Foundation.NSString.EnumerationOptions` |  |
+| `typealias CompareOptions = Foundation.NSString.CompareOptions` |  |
+
+
 ## Open Questions
 
-* Do we need the `TextOutputStream` API?  It is optimized for formatting
-  directly into a destination without the creation of intermediate strings
-  and/or string storage, and without the cost of type erasure imposed by
-  trafficking in string directly.  If we have a `StringProtocol`, in principle
-  `TextOutputStream` and `TextOutputStreamable` might be avoided by creating
-  models of that protocol that store the things being formatted.  An example of
-  what I'm describing can be seen
-  in
-  [this example](https://github.com/apple/swift/blob/cc3947066f24d3abc32cfe4fc55ac05ba44db796/test/Prototypes/TextFormatting.swift/#L175)),
-  but of course that uses `TextOutputStreamable`'s API, which “pushes” text into
-  a `TextOutputStream`.  Modeling it as a `StringProtocol` instance would
-  effectively mean exposing a `Collection` of `UnicodeScalar`s that would be
-  “pulled” from.  I'm not sure whether that can be as effectively optimized,
-  especially while the language has no native inversion-of-control (e.g. `yield`)
-  mechanism.
+### `TextOutputStream` and `TextOutputStreamable`
+
+Do we need the `TextOutputStream` API?  It is optimized for formatting
+directly into a destination without the creation of intermediate strings
+and/or string storage, and without the cost of type erasure imposed by
+trafficking in string directly.  
+
+If we have a `StringProtocol`, in principle we might avoid these APIs by
+creating models of `StringProtocol` that store the things being formatted.  An
+example of what I'm describing can be seen
+in
+[this example](https://github.com/apple/swift/blob/cc3947066f24d3abc32cfe4fc55ac05ba44db796/test/Prototypes/TextFormatting.swift/#L175)),
+but of course that uses `TextOutputStreamable`'s API, which “pushes” text into a
+`TextOutputStream`.  Modeling it as a `StringProtocol` instance would
+effectively mean exposing a `Collection` of `UnicodeScalar`s that would be
+“pulled” from.  I'm not sure whether that can be as effectively optimized,
+especially while the language has no native inversion-of-control (e.g. `yield`)
+mechanism.  In fact, we have no data on whether using `TextOutputStream` is even
+currently a performance win, and I am not sure what experiments might be needed
+in order to find out.
+
+### `description` and `debugDescription`
+
+* Should these be creating localized or non-localized representations?
+* Is returning a `String` efficient enough?
+
+### Naming, Again
+
+`StringProtocol` and `TextProtocol` are not very inspiring names, but I can't
+think of better ones.
 
 <!-- Local Variables: -->
 <!-- eval: (buffer-face-mode 1) -->
