@@ -354,7 +354,7 @@ issues:
 
 ## Existing String API and Suggested Disposition
 
-**Legend**:  ✅ = Keep, ❌ = Discard, ↗️ = Transplant, ❓= TBD
+**Legend**:  ✅ = Keep, ❌ = Discard, ↗️ = Transplant,⛏️= Redesign, ❓= TBD
  
 
 **API** | **Suggested Disposition**
@@ -367,12 +367,12 @@ issues:
 `init?(validatingUTF8: UnsafePointer<CChar>)` | ❓probably OK
 `static func decodeCString<Encoding : UnicodeCodec>(`<br/>`  _: UnsafePointer<Encoding.CodeUnit>?,`<br/>`  as: Encoding.Type,`<br/>`  repairingInvalidCodeUnits: Bool = default`<br/>`) -> (result: String, repairsMade: Bool)?` | ✅Would be an init except for repairsMade
 `func withCString<Result>(`<br/>`  _: (UnsafePointer<Int8>) throws -> Result`<br/>`) rethrows -> Result` |❓
-`var utf8CString: ContiguousArray<CChar>` | Reevaluate all CString APIs
+`var utf8CString: ContiguousArray<CChar>` | ❓Reevaluate all CString APIs
 ------------------------------ | ------------------------------
 `var customMirror: Mirror` |❓
 `var customPlaygroundQuickLook: PlaygroundQuickLook` | ↗️Move CustomPlaygroundQuickLookable to PlaygroundSupport library
 ------------------------------ | ------------------------------
-`mutating func write(_: String)` | Rethink `TextOutputStreamable`/`TextOutputStream`
+`mutating func write(_: String)` | ❓Rethink `TextOutputStreamable`/`TextOutputStream`
 `func write<Target : TextOutputStream>(to: inout Target)` |❓
 ------------------------------ | ------------------------------
 `struct CharacterView` | ✅
@@ -419,7 +419,7 @@ issues:
 `typealias IndexDistance = ...` | ❌can't count elements on a roll of cookie dough
 `var startIndex: String.Index` |❓
 `var endIndex: String.Index` |❓
-`func index(after: String.Index) -> String.Index` | The following should die
+`func index(after: String.Index) -> String.Index` | ❌️The following should die
 `func index(before: String.Index) -> String.Index` |❓
 `func index(`<br/>`  _: String.Index,`<br/>`  offsetBy: String.IndexDistance) -> String.Index` |❓
 `func index(`<br/>`  _: String.Index,`<br/>`  offsetBy: String.IndexDistance,`<br/>`  limitedBy: String.Index) -> String.Index?` |❓
@@ -429,15 +429,15 @@ issues:
 `subscript(bounds: ClosedRange<String.Index>) -> String` |❓
 `init<S : Sequence where S.Iterator.Element == Character>(_: S)` |❓
 `mutating func reserveCapacity(_: Int)` |❓
-`mutating func append(_: Character)` | Append String content
+`mutating func append(_: Character)` | ❓Append String content
 `mutating func append<`<br/>`  S : Sequence where S.Iterator.Element == Character`<br/>`  >(contentsOf: S)` |❓
-`mutating func replaceSubrange<`<br/>`  C where C : Collection, C.Iterator.Element == Character`<br/>`>(_: Range<String.Index>, with: C)` | Drop all the Character-based APIs
+`mutating func replaceSubrange<`<br/>`  C where C : Collection, C.Iterator.Element == Character`<br/>`>(_: Range<String.Index>, with: C)` | ❌️Drop all the Character-based APIs
 `mutating func replaceSubrange(`<br/>`  _: Range<String.Index>, with: String)` |❓
 `mutating func replaceSubrange<`<br/>`  C where C : Collection, C.Iterator.Element == Character`<br/>`>(`<br/>`  _: ClosedRange<String.Index>, with: C)` |❓
 `mutating func replaceSubrange(_: ClosedRange<String.Index>, with: String)` |❓
 `mutating func insert(_: Character, at: String.Index)` |❓
 `mutating func insert<`<br/>`  S : Collection where S.Iterator.Element == Character`<br/>`>(contentsOf: S, at: String.Index)` |❓
-`@discardableResult`<br/>`mutating func remove(at: String.Index) -> Character` | Drop this
+`@discardableResult`<br/>`mutating func remove(at: String.Index) -> Character` | ❌️Drop this
 `mutating func removeSubrange(_: Range<String.Index>)` | Cosolidate ranges under a protocol
 `mutating func removeSubrange(_: ClosedRange<String.Index>)` |❓
 `mutating func removeAll(keepingCapacity: Bool = default)` |❓
@@ -448,41 +448,41 @@ issues:
 `struct UTF8View` |❓
 `init<Subject>(describing: Subject)` |❓
 `init<Subject>(reflecting: Subject)` |❓
-`static var defaultCStringEncoding: String.Encoding` | Move these onto StringEncoding (UnicodeEncoding?)
+`static var defaultCStringEncoding: String.Encoding` | ↗️Move these onto StringEncoding (UnicodeEncoding?)
 `static func localizedName(of: String.Encoding) -> String` |❓
-`static func localizedStringWithFormat(`<br/>`  _: String, _: CVarArg...) -> String` | Kill off printf-style interface
-`init?(utf8String: UnsafePointer<CChar>)` | Duplicates init(cString:)?
-`func canBeConverted(to: String.Encoding) -> Bool` | Move to StringEncoding:  e.canRepresent(s)
+`static func localizedStringWithFormat(`<br/>`  _: String, _: CVarArg...) -> String` | ❌️Kill off printf-style interface
+`init?(utf8String: UnsafePointer<CChar>)` | ❓Duplicates init(cString:)?
+`func canBeConverted(to: String.Encoding) -> Bool` | ↗️Move to StringEncoding:  e.canRepresent(s)
 `var capitalized: String` |❓
-`var localizedCapitalized: String` | Locales->Text
+`var localizedCapitalized: String` | ❓Locales->Text
 `func capitalized(with: Foundation.Locale?) -> String` |❓
 `func caseInsensitiveCompare(`<br/>`  _: String) -> Foundation.ComparisonResult` |❓
 `func commonPrefix(`<br/>`  with: String, options: String.CompareOptions = default) -> String` | Replace with mismatch
 `func compare(`<br/>`  _: String,`<br/>`  options: String.CompareOptions = default,`<br/>`  range: Range<String.Index>? = default,`<br/>`  locale: Foundation.Locale? = default`<br/>`) -> Foundation.ComparisonResult` |❓
-`func completePath(`<br/>`  into: UnsafeMutablePointer<String>? = default,`<br/>`  caseSensitive: Bool,`<br/>`  matchesInto: UnsafeMutablePointer<[String]>? = default,`<br/>`  filterTypes: [String]? = default`<br/>`) -> Int` | Transplant
+`func completePath(`<br/>`  into: UnsafeMutablePointer<String>? = default,`<br/>`  caseSensitive: Bool,`<br/>`  matchesInto: UnsafeMutablePointer<[String]>? = default,`<br/>`  filterTypes: [String]? = default`<br/>`) -> Int` | ↗️Transplant
 `func components(`<br/>`  separatedBy: Foundation.CharacterSet`<br/>`) -> [String]` | Split
 `func components(separatedBy: String) -> [String]` |❓
-`func cString(using: String.Encoding) -> [CChar]?` | e.cString(s)
+`func cString(using: String.Encoding) -> [CChar]?` | ↗️e.cString(s)
 `func data(`<br/>`  using: String.Encoding,`<br/>`  allowLossyConversion: Bool = default`<br/>`) -> Foundation.Data?` | ↗️Should be a failable `Data.init`
 ------------------------------ | ------------------------------
-`var decomposedStringWithCanonicalMapping: String` | Undecided
+`var decomposedStringWithCanonicalMapping: String` | ❓Undecided
 `var decomposedStringWithCompatibilityMapping: String` |❓
 `var precomposedStringWithCanonicalMapping: String` |❓
 `var precomposedStringWithCompatibilityMapping: String` |❓
 `func enumerateLines(`<br/>`  invoking: @escaping (String, inout Bool) -> ())` |❓
 `func getLineStart(`<br/>`  _: UnsafeMutablePointer<String.Index>,`<br/>`  end: UnsafeMutablePointer<String.Index>,`<br/>`  contentsEnd: UnsafeMutablePointer<String.Index>,`<br/>`  for: Range<String.Index>)` |❓
 `func getParagraphStart(`<br/>`  _: UnsafeMutablePointer<String.Index>,`<br/>`  end: UnsafeMutablePointer<String.Index>,`<br/>`  contentsEnd: UnsafeMutablePointer<String.Index>,`<br/>`  for: Range<String.Index>)` |❓
-`func enumerateSubstrings(`<br/>`  in: Range<String.Index>,`<br/>`  options: String.EnumerationOptions = default,`<br/>`  _: @escaping (`<br/>`    String?, Range<String.Index>, Range<String.Index>, inout Bool) -> ())` | Should be one or more collection/sequence properties
-`func enumerateLinguisticTags(`<br/>`  in: Range<String.Index>,`<br/>`  scheme: String,`<br/>`  options: Foundation.NSLinguisticTagger.Options = default,`<br/>`  orthography: Foundation.NSOrthography? = default,`<br/>`  invoking: (String,`<br/>`  Range<String.Index>,`<br/>`  Range<String.Index>, inout Bool) -> ())` | LinguisticTagger
- `var fastestEncoding: String.Encoding` | StringEncoding init
-`func getBytes(`<br/>`  _: inout [UInt8],`<br/>`  maxLength: Int,`<br/>`  usedLength: UnsafeMutablePointer<Int>,`<br/>`  encoding: String.Encoding,`<br/>`  options: String.EncodingConversionOptions = default,`<br/>`  range: Range<String.Index>,`<br/>`  remaining: UnsafeMutablePointer<Range<String.Index>>) -> Bool` | Encoding/Decoding
+`func enumerateSubstrings(`<br/>`  in: Range<String.Index>,`<br/>`  options: String.EnumerationOptions = default,`<br/>`  _: @escaping (`<br/>`    String?, Range<String.Index>, Range<String.Index>, inout Bool) -> ())` | ❓Should be one or more collection/sequence properties
+`func enumerateLinguisticTags(`<br/>`  in: Range<String.Index>,`<br/>`  scheme: String,`<br/>`  options: Foundation.NSLinguisticTagger.Options = default,`<br/>`  orthography: Foundation.NSOrthography? = default,`<br/>`  invoking: (String,`<br/>`  Range<String.Index>,`<br/>`  Range<String.Index>, inout Bool) -> ())` | ❓LinguisticTagger
+ `var fastestEncoding: String.Encoding` | ↗️StringEncoding init
+`func getBytes(`<br/>`  _: inout [UInt8],`<br/>`  maxLength: Int,`<br/>`  usedLength: UnsafeMutablePointer<Int>,`<br/>`  encoding: String.Encoding,`<br/>`  options: String.EncodingConversionOptions = default,`<br/>`  range: Range<String.Index>,`<br/>`  remaining: UnsafeMutablePointer<Range<String.Index>>) -> Bool` | ❓Encoding/Decoding
 `func getCString(`<br/>`  _: inout [CChar],`<br/>`  maxLength: Int,`<br/>`  encoding: String.Encoding) -> Bool` |❓
 `init?<`<br/>`  S : Sequence where S.Iterator.Element == UInt8`<br/>`  >(bytes: S, encoding: String.Encoding)` |❓
 `init?(`<br/>`  bytesNoCopy: UnsafeMutableRawPointer,`<br/>`  length: Int,`<br/>`  encoding: String.Encoding,`<br/>`  freeWhenDone: Bool)` |❓
 `init(`<br/>`  utf16CodeUnits: UnsafePointer<Foundation.unichar>,`<br/>`  count: Int)` |❓
 `var hash: Int` | We should kill off the incorrect == behavior and associated hash
 `init(`<br/>`  utf16CodeUnitsNoCopy: UnsafePointer<Foundation.unichar>,`<br/>`  count: Int,`<br/>`  freeWhenDone: Bool)` |❓
-`init(`<br/>`  contentsOfFile: String,`<br/>`  encoding: String.Encoding) throws` | Undecided, but definitely belongs elsewhere.  Why do we have path Strings
+`init(`<br/>`  contentsOfFile: String,`<br/>`  encoding: String.Encoding) throws` | ↗️Undecided, but definitely belongs elsewhere.  Why do we have path Strings
 `init(`<br/>`  contentsOfFile: String, usedEncoding: inout String.Encoding`<br/>`) throws` |❓
 `init(contentsOfFile: String) throws` |❓
 `init(`<br/>`  contentsOf: Foundation.URL,`<br/>`  encoding: String.Encoding) throws` |❓
