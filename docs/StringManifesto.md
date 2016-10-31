@@ -351,7 +351,22 @@ issues:
     longer strings.  A String's `.characters` can become a collection of
     substrings.  We can also drop the
     `ExpressibleByExtendedGraphemeClusterLiteral` protocol for the same reason.
-
+  * Adopt
+    [this proposal](https://github.com/apple/swift-evolution/blob/9cf2685293108ea3efcbebb7ee6a8618b83d4a90/proposals/0132-sequence-end-ops.md) and
+    implement generic subscripting in the language. Removes the proliferation of
+    `subscript` overloads and a bunch of `prefix` and `suffix` methods.
+  * Adopt a version
+    of
+    [this proposal](https://github.com/pyrtsa/swift-evolution/blob/ca89e7b3a1dffc99baa695a03544fcba75afd0f3/proposals/NNNN-formalized-ordering.md) (implemented
+    by [these changes](https://github.com/dabrahams/swift/pull/1)) that uses a
+    `s1.compare(s2)` method (rather than a “spaceship operator” `<=>`, which has
+    only a very weak advantage in that it can be defined in the library for
+    tuples but is insufficient to let tuples conform to a protocol).  This will
+    give us a platform to implement methods with additional, defaulted
+    arguments, e.g. `s1.compare(s2, caseInsensitive: true)`, thereby unifying
+    comparisons.
+    
+    
 ## Existing String API and Suggested Disposition
 
 **Legend**:  ✅ = Keep, ❌ = Discard, ↗️ = Transplant,⛏️= Redesign, ❓= TBD
@@ -379,6 +394,9 @@ issues:
 `var customPlaygroundQuickLook: PlaygroundQuickLook` | ↗️Move CustomPlaygroundQuickLookable to PlaygroundSupport library
 
 ### `Character` Data Type Support
+
+We are recommending removing this data type in favor of `String` and
+`String.Slice` (a.k.a. `Substring`).
 
 **API** | **Suggested Disposition**
 :-------- | :-------
@@ -480,7 +498,7 @@ issues:
 
 **API** | **Suggested Disposition**
 ---|---
-`subscript(bounds: Range<String.Index>) -> String` | Keep these
+`subscript(bounds: Range<String.Index>) -> String` | ✅ Part of `Sliceable` Protocol, but generic on [`RangeExpression`](https://github.com/brentdax/swift/blob/incomplete-range/stdlib/public/core/RangeExpression.swift.gyb)
 `subscript(bounds: ClosedRange<String.Index>) -> String` |❓
 `init<S : Sequence where S.Iterator.Element == Character>(_: S)` |❓
 `mutating func reserveCapacity(_: Int)` |⛏️At least rename this; it can only reserve ASCII capacity today.  Probably this should be on the UnicodeScalars.
@@ -607,6 +625,8 @@ mechanism.  In fact, we have no data on whether using `TextOutputStream` is even
 currently a performance win, and I am not sure what experiments might be needed
 in order to find out.
 
+One thing is clear: if we do keep it, 
+
 ### `description` and `debugDescription`
 
 * Should these be creating localized or non-localized representations?
@@ -617,6 +637,12 @@ in order to find out.
 
 `StringProtocol` and `TextProtocol` are not very inspiring names, but I can't
 think of better ones.
+
+### `StaticString`
+
+`StaticString` was added as a byproduct of standard library developed and kept
+around because it seemed useful, but it was never truly *designed* for client
+programmers.  We need to decide what happens with it.
 
 <!-- Local Variables: -->
 <!-- eval: (buffer-face-mode 1) -->
