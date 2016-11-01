@@ -93,12 +93,12 @@ A `String` does not act like a `Collection` of anything:
 ```swift
 // Not a Collection of Characters
 "e".characters.count               // 1
-"\u{301}".characters.count         // 1
+"\u{301}".characters.count         // 1 (COMBINING ACUTE ACCENT)
 ("e" + "\u{301}").characters.count // also 1
 
 // Not a Collection of UnicodeScalars
 "e\u{301}".unicodeScalars.count    // 2
-"\u{e9}".unicodeScalars.count      // 1
+"\u{e9}".unicodeScalars.count      // 1 (LATIN SMALL LETTER E WITH ACUTE)
 "e\u{301}" == "\u{e9}"             // true
 ```
 
@@ -114,9 +114,8 @@ s.formIndex(after: &i) // Moves i past the first Character
 Exposing fine-grained `Character` traversal at the top level of the `String` API
 is conceptually wrong, and encourages users to do character-by-character string
 analysis.  Because some strings that should be equal have unequal numbers of
-characters (e.g., `"\u{2024}\u{2024}"` and `"\u{2025}"`), processing one
-character at a time is almost always a bug, and the fact that such cases are
-rare means the bug is unlikely to be caught in testing.
+characters,<sup id="a1">[1](#f1)</sup> processing one character at a time is almost always a bug, and the
+fact that such cases are rare means the bug is unlikely to be caught in testing.
 
 The right model for `String` is more like a roll of cookie dough with some rocks
 hidden in it: a continuous thing that can be sliced into shorter things, but
@@ -268,12 +267,21 @@ solving this problem is easy, and supports the goal of reduced API surface area.
 String comparison isn't implemented according to the Unicode standard.  All of
 the following should evaluate as `true`, but currently do not:
 
-```swift
-"a" < "J" 
-"\u{2024}\u{2024}" == "\u{2025}"
-"\u{2024}\u{2025}" == "\u{2026}"
-"\u{222c}\u{222c}\u{222c}" == "\u{222d}\u{222d}"
-```
+**Expression** | **Notes**
+---|---
+`"a" < "J"`| Unicode interleaves case: a < A < b < B…
+`"\u{2024}\u{2024}" == "\u{2025}"`| 2x ONE DOT LEADER, TWO DOT LEADER
+`"\u{2024}\u{2025}" == "\u{2026}"` | ONE + TWO DOT LEADER, HORIZONTAL ELLIPSIS
+`"\u{222c}\u{222c}\u{222c}" == "\u{222d}\u{222d}"` | 3x DOUBLE INTEGRAL, 2x TRIPLE INTEGRAL
+
+
+Legend: 
+
+  *  u2024 = ONE DOT LEADER
+  *  u2025 = TWO DOT LEADER
+  *  u2026 = HORIZONTAL ELLIPSIS
+  *  u222c = DOUBLE INTEGRAL
+  *  u222d = TRIPLE INTEGRAL
 
 Strings in Swift are specifically intended to be—and are documented as—
 Unicode-correct, so deviating from the standard in this way is not consistent
@@ -392,6 +400,11 @@ issues:
 `init()` | ✅
 `var customMirror: Mirror` |✅
 `var customPlaygroundQuickLook: PlaygroundQuickLook` | ↗️Move CustomPlaygroundQuickLookable to PlaygroundSupport library
+`init(_: String)` | ❓Should be resolved the same way as other "copy initializers" for value types
+`func lowercased() -> String` |✅
+`func uppercased() -> String` |✅
+`init<T : LosslessStringConvertible>(_: T)` |✅
+`init?(_: String)` |❓Why do we have this?
 
 ### `Character` Data Type Support
 
@@ -427,27 +440,28 @@ We are recommending removing this data type in favor of `String` and
 `typealias UTF16Index =`…  |❌Obsoleted by index unification
 `typealias UTF8Index =`… |❌Obsoleted by index unification
 `typealias UnicodeScalarIndex =`… |❌Obsoleted by index unification
+`mutating func withMutableCharacters<R>(`<br/>`  _: (inout String.CharacterView) -> R) -> R` | ❌ Expected to be obsoleted by better `inout` support.
+`init(_: String.CharacterView)` | ✅ Not strictly needed; we can assign to the `characters` of an empty string.<br/>We can also do `characters.joined(separator: "")` if the elements are `String`s.
 
-### XXX
+### Comparison and Collation
 
 **API** | **Suggested Disposition**
 ---|---
-`init(_: String)` | ? - Should be resolved the same way as other "copy initializers" for value types
-`mutating func withMutableCharacters<R>(`<br/>`  _: (inout String.CharacterView) -> R) -> R` | ❌ Supported for efficiency reasons; expected to be obsoleted by better `inout` support with borrows.
-`init(_: String.CharacterView)` | ❓this is not strictly needed; we can assign to the `characters` of an empty string.  We can also do `characters.joined(separator: "")` if the elements are `String`s.
 `static func <(lhs: String, rhs: String) -> Bool` |❓
-`var hashValue: Int` |❓
-`func lowercased() -> String` |✅
-`func uppercased() -> String` |✅
-`init<T : LosslessStringConvertible>(_: T)` |✅
-`init?(_: String)` |❓Why do we have this?
+`var hashValue: Int` |✅
+
 
 ### Formatting
+
+**API** | **Suggested Disposition**
+---|---
 `var debugDescription: String` |❓
 `var description: String` |❓
 
 ### Literal Convertibility
 
+**API** | **Suggested Disposition**
+---|---
 `init(unicodeScalarLiteral: String)` |❓
 `typealias UnicodeScalarLiteralType = String` |❓
 `init(stringLiteral: String)` |❓
@@ -643,6 +657,11 @@ think of better ones.
 `StaticString` was added as a byproduct of standard library developed and kept
 around because it seemed useful, but it was never truly *designed* for client
 programmers.  We need to decide what happens with it.
+
+---------------
+
+<b id="f1">1</b> For example, ONE DOT LEADER (u2024) and TWO DOT LEADER (u2025) are both complete grapheme clusters, but according to Unicode, `"\u{2024}\u{2024}"` is equivalent to `"\u{2025}"`. [↩](#a1)
+
 
 <!-- Local Variables: -->
 <!-- eval: (buffer-face-mode 1) -->
