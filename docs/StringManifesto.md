@@ -391,7 +391,7 @@ issues:
 `var utf8CString: ContiguousArray<CChar>` | ❓Reevaluate all CString APIs
 `func getCString(`<br/>`  _: inout [CChar],`<br/>`  maxLength: Int,`<br/>`  encoding: String.Encoding) -> Bool` |❓
 `func cString(using: String.Encoding) -> [CChar]?` | ↗️e.cString(s)
-`init?(cString: UnsafePointer<CChar>, encoding: String.Encoding)` |❓
+`init?(`<br/>`  cString: UnsafePointer<CChar>,`<br/>`  encoding: String.Encoding)` |❓
 
 ### Miscellaneous
 
@@ -513,19 +513,19 @@ We are recommending removing this data type in favor of `String` and
 **API** | **Suggested Disposition**
 ---|---
 `subscript(bounds: Range<String.Index>) -> String` | ✅ Part of `Sliceable` Protocol, but generic on [`RangeExpression`](https://github.com/brentdax/swift/blob/incomplete-range/stdlib/public/core/RangeExpression.swift.gyb)
-`subscript(bounds: ClosedRange<String.Index>) -> String` |❓
-`init<S : Sequence where S.Iterator.Element == Character>(_: S)` |❓
+`subscript(bounds: ClosedRange<String.Index>) -> String` |❌Collapsed with the above
+`init<`<br/>`  S : Sequence where S.Iterator.Element == Character`<br/>`>(_: S)` |✅`init<S : StringProtocol>(_: S)`
 `mutating func reserveCapacity(_: Int)` |⛏️At least rename this; it can only reserve ASCII capacity today.  Probably this should be on the UnicodeScalars.
-`mutating func append<`<br/>`  S : Sequence where S.Iterator.Element == Character`<br/>`  >(contentsOf: S)` |❓
-`mutating func replaceSubrange<`<br/>`  C where C : Collection, C.Iterator.Element == Character`<br/>`>(_: Range<String.Index>, with: C)` | ⛏️This is still Character-based APIs
+`mutating func append<`<br/>`  S : Sequence where S.Iterator.Element == Character`<br/>`  >(contentsOf: S)` |✅`mutating func append<S: StringProtocol>(_: S)`
+`mutating func replaceSubrange<`<br/>`  C where C : Collection, C.Iterator.Element == Character`<br/>`>(_: Range<String.Index>, with: C)` | ✅`mutating func replaceSubrange<S: StringProtocol>(_: Range<String.Index>, with: S)`
 `mutating func replaceSubrange(`<br/>`  _: Range<String.Index>, with: String)` |❓
 `mutating func replaceSubrange<`<br/>`  C where C : Collection, C.Iterator.Element == Character`<br/>`>(`<br/>`  _: ClosedRange<String.Index>, with: C)` |❓
-`mutating func replaceSubrange(_: ClosedRange<String.Index>, with: String)` |❓
+`mutating func replaceSubrange(`<br/>`  _: ClosedRange<String.Index>, with: String)` |❓
 `mutating func insert(_: Character, at: String.Index)` |❓
 `mutating func insert<`<br/>`  S : Collection where S.Iterator.Element == Character`<br/>`>(contentsOf: S, at: String.Index)` |❓
 `@discardableResult`<br/>`mutating func remove(at: String.Index) -> Character` | ❌️Drop this
 `mutating func removeSubrange(_: Range<String.Index>)` | Cosolidate ranges under a protocol
-`mutating func removeSubrange(_: ClosedRange<String.Index>)` |❓
+`mutating func removeSubrange(`<br/>`  _: ClosedRange<String.Index>)` |❓
 `mutating func removeAll(keepingCapacity: Bool = default)` |❓
 `init<Subject>(describing: Subject)` |❓
 `init<Subject>(reflecting: Subject)` |❓
@@ -536,15 +536,14 @@ We are recommending removing this data type in favor of `String` and
 `func canBeConverted(to: String.Encoding) -> Bool` | ↗️Move to StringEncoding:  e.canRepresent(s)
 `var capitalized: String` |❓
 `var localizedCapitalized: String` | ❓Locales->Text
-`func capitalized(with: Foundation.Locale?) -> String` |❓
-`func caseInsensitiveCompare(`<br/>`  _: String) -> Foundation.ComparisonResult` |❓
-`func commonPrefix(`<br/>`  with: String, options: String.CompareOptions = default) -> String` | Replace with mismatch
-`func compare(`<br/>`  _: String,`<br/>`  options: String.CompareOptions = default,`<br/>`  range: Range<String.Index>? = default,`<br/>`  locale: Foundation.Locale? = default`<br/>`) -> Foundation.ComparisonResult` |❓
+`func capitalized(with: Locale?) -> String` |❓
+`func caseInsensitiveCompare(`<br/>`  _: String) -> ComparisonResult` |❓
+`func commonPrefix(`<br/>`  with: String,`<br/>`  options: String.CompareOptions = default`<br/>`) -> String` | Replace with mismatch
+`func compare(`<br/>`  _: String,`<br/>`  options: String.CompareOptions = default,`<br/>`  range: Range<String.Index>? = default,`<br/>`  locale: Locale? = default`<br/>`) -> ComparisonResult` |❓
 `func completePath(`<br/>`  into: UnsafeMutablePointer<String>? = default,`<br/>`  caseSensitive: Bool,`<br/>`  matchesInto: UnsafeMutablePointer<[String]>? = default,`<br/>`  filterTypes: [String]? = default`<br/>`) -> Int` | ↗️Transplant
-`func components(`<br/>`  separatedBy: Foundation.CharacterSet`<br/>`) -> [String]` | Split
+`func components(`<br/>`  separatedBy: CharacterSet`<br/>`) -> [String]` | Split
 `func components(separatedBy: String) -> [String]` |❓
-`func data(`<br/>`  using: String.Encoding,`<br/>`  allowLossyConversion: Bool = default`<br/>`) -> Foundation.Data?` | ↗️Should be a failable `Data.init`
------------------------------- | ------------------------------
+`func data(`<br/>`  using: String.Encoding,`<br/>`  allowLossyConversion: Bool = default`<br/>`) -> Data?` | ↗️Should be a failable `Data.init`
 `var decomposedStringWithCanonicalMapping: String` | ❓Undecided
 `var decomposedStringWithCompatibilityMapping: String` |❓
 `var precomposedStringWithCanonicalMapping: String` |❓
@@ -552,62 +551,62 @@ We are recommending removing this data type in favor of `String` and
 `func enumerateLines(`<br/>`  invoking: @escaping (String, inout Bool) -> ())` |❓
 `func getLineStart(`<br/>`  _: UnsafeMutablePointer<String.Index>,`<br/>`  end: UnsafeMutablePointer<String.Index>,`<br/>`  contentsEnd: UnsafeMutablePointer<String.Index>,`<br/>`  for: Range<String.Index>)` |❓
 `func getParagraphStart(`<br/>`  _: UnsafeMutablePointer<String.Index>,`<br/>`  end: UnsafeMutablePointer<String.Index>,`<br/>`  contentsEnd: UnsafeMutablePointer<String.Index>,`<br/>`  for: Range<String.Index>)` |❓
-`func enumerateSubstrings(`<br/>`  in: Range<String.Index>,`<br/>`  options: String.EnumerationOptions = default,`<br/>`  _: @escaping (`<br/>`    String?, Range<String.Index>, Range<String.Index>, inout Bool) -> ())` | ❓Should be one or more collection/sequence properties
-`func enumerateLinguisticTags(`<br/>`  in: Range<String.Index>,`<br/>`  scheme: String,`<br/>`  options: Foundation.NSLinguisticTagger.Options = default,`<br/>`  orthography: Foundation.NSOrthography? = default,`<br/>`  invoking: (String,`<br/>`  Range<String.Index>,`<br/>`  Range<String.Index>, inout Bool) -> ())` | ❓LinguisticTagger
+`func enumerateSubstrings(`<br/>`  in: Range<String.Index>,`<br/>`  options: String.EnumerationOptions = default,`<br/>`  _: @escaping (`<br/>`    String?,`<br/>`  Range<String.Index>,`<br/>`  Range<String.Index>,`<br/>`  inout Bool) -> ())` | ❓Should be one or more collection/sequence properties
+`func enumerateLinguisticTags(`<br/>`  in: Range<String.Index>,`<br/>`  scheme: String,`<br/>`  options: NSLinguisticTagger.Options = default,`<br/>`  orthography: NSOrthography? = default,`<br/>`  invoking: (String,`<br/>`  Range<String.Index>,`<br/>`  Range<String.Index>, inout Bool) -> ())` | ❓LinguisticTagger
  `var fastestEncoding: String.Encoding` | ↗️StringEncoding init
-`func getBytes(`<br/>`  _: inout [UInt8],`<br/>`  maxLength: Int,`<br/>`  usedLength: UnsafeMutablePointer<Int>,`<br/>`  encoding: String.Encoding,`<br/>`  options: String.EncodingConversionOptions = default,`<br/>`  range: Range<String.Index>,`<br/>`  remaining: UnsafeMutablePointer<Range<String.Index>>) -> Bool` | ❓Encoding/Decoding
+`func getBytes(`<br/>`  _: inout [UInt8],`<br/>`  maxLength: Int,`<br/>`  usedLength: UnsafeMutablePointer<Int>,`<br/>`  encoding: String.Encoding,`<br/>`  options: String.EncodingConversionOptions = default,`<br/>`  range: Range<String.Index>,`<br/>`  remaining: UnsafeMutablePointer<Range<String.Index>>`<br/>`) -> Bool` | ❓Encoding/Decoding
 `init?<`<br/>`  S : Sequence where S.Iterator.Element == UInt8`<br/>`  >(bytes: S, encoding: String.Encoding)` |❓
 `init?(`<br/>`  bytesNoCopy: UnsafeMutableRawPointer,`<br/>`  length: Int,`<br/>`  encoding: String.Encoding,`<br/>`  freeWhenDone: Bool)` |❓
-`init(`<br/>`  utf16CodeUnits: UnsafePointer<Foundation.unichar>,`<br/>`  count: Int)` |❓
+`init(`<br/>`  utf16CodeUnits: UnsafePointer<unichar>,`<br/>`  count: Int)` |❓
 `var hash: Int` | We should kill off the incorrect == behavior and associated hash
-`init(`<br/>`  utf16CodeUnitsNoCopy: UnsafePointer<Foundation.unichar>,`<br/>`  count: Int,`<br/>`  freeWhenDone: Bool)` |❓
+`init(`<br/>`  utf16CodeUnitsNoCopy: UnsafePointer<unichar>,`<br/>`  count: Int,`<br/>`  freeWhenDone: Bool)` |❓
 `init(`<br/>`  contentsOfFile: String,`<br/>`  encoding: String.Encoding) throws` | ↗️Undecided, but definitely belongs elsewhere.  Why do we have path Strings
 `init(`<br/>`  contentsOfFile: String, usedEncoding: inout String.Encoding`<br/>`) throws` |❓
 `init(contentsOfFile: String) throws` |❓
-`init(`<br/>`  contentsOf: Foundation.URL,`<br/>`  encoding: String.Encoding) throws` |❓
-`init(`<br/>`  contentsOf: Foundation.URL,`<br/>`  usedEncoding: inout String.Encoding`<br/>`) throws` |❓
-`init(contentsOf: Foundation.URL) throws` |❓
-`init?(data: Foundation.Data, encoding: String.Encoding)` |❓
+`init(`<br/>`  contentsOf: URL,`<br/>`  encoding: String.Encoding) throws` |❓
+`init(`<br/>`  contentsOf: URL,`<br/>`  usedEncoding: inout String.Encoding`<br/>`) throws` |❓
+`init(contentsOf: URL) throws` |❓
+`init?(data: Data, encoding: String.Encoding)` |❓
 `init(format: String, _: CVarArg...)` |❓
 `init(format: String, arguments: [CVarArg])` |❓
-`init(format: String, locale: Foundation.Locale?, _: CVarArg...)` |❓
-`init(`<br/>`  format: String,`<br/>`  locale: Foundation.Locale?,`<br/>`  arguments: [CVarArg])` |❓
+`init(`<br/>`  format: String,`<br/>`  locale: Locale?,`<br/>`  _: CVarArg...)` |❓
+`init(`<br/>`  format: String,`<br/>`  locale: Locale?,`<br/>`  arguments: [CVarArg])` |❓
 `func lengthOfBytes(using: String.Encoding) -> Int` |❓
-`func lineRange(for: Range<String.Index>) -> Range<String.Index>` |❓
-`func linguisticTags(`<br/>`  in: Range<String.Index>,`<br/>`  scheme: String,`<br/>`  options: Foundation.NSLinguisticTagger.Options = default,`<br/>`  orthography: Foundation.NSOrthography? = default,`<br/>`  tokenRanges: UnsafeMutablePointer<[Range<String.Index>]>? = default`<br/>`) -> [String]` |❓
-`func localizedCaseInsensitiveCompare(`<br/>`  _: String) -> Foundation.ComparisonResult` |❓
-`func localizedCompare(`<br/>`  _: String) -> Foundation.ComparisonResult` |❓
-`func localizedStandardCompare(`<br/>`  _: String) -> Foundation.ComparisonResult` |❓
+`func lineRange(`<br/>`  for: Range<String.Index>`<br/>`) -> Range<String.Index>` |❓
+`func linguisticTags(`<br/>`  in: Range<String.Index>,`<br/>`  scheme: String,`<br/>`  options: NSLinguisticTagger.Options = default,`<br/>`  orthography: NSOrthography? = default,`<br/>`  tokenRanges: UnsafeMutablePointer<[Range<String.Index>]>? = default`<br/>`) -> [String]` |❓
+`func localizedCaseInsensitiveCompare(`<br/>`  _: String) -> ComparisonResult` |❓
+`func localizedCompare(`<br/>`  _: String) -> ComparisonResult` |❓
+`func localizedStandardCompare(`<br/>`  _: String) -> ComparisonResult` |❓
 `var localizedLowercase: String` |❓
-`func lowercased(with: Foundation.Locale?) -> String` |❓
+`func lowercased(with: Locale?) -> String` |❓
 `func maximumLengthOfBytes(using: String.Encoding) -> Int` |❓
 `func paragraphRange(`<br/>`  for: Range<String.Index>) -> Range<String.Index>` |❓
 `func propertyList() -> Any` |❓
-`func propertyListFromStringsFileFormat() -> [String : String]` |❓
-`func rangeOfCharacter(`<br/>`  from: Foundation.CharacterSet,`<br/>`  options: String.CompareOptions = default,`<br/>`  range: Range<String.Index>? = default`<br/>`) -> Range<String.Index>?` |❓
+`func propertyListFromStringsFileFormat()`<br/>`  -> [String : String]` |❓
+`func rangeOfCharacter(`<br/>`  from: CharacterSet,`<br/>`  options: String.CompareOptions = default,`<br/>`  range: Range<String.Index>? = default`<br/>`) -> Range<String.Index>?` |❓
 `func rangeOfComposedCharacterSequence(`<br/>`  at: String.Index) -> Range<String.Index>` |❓
 `func rangeOfComposedCharacterSequences(`<br/>`  for: Range<String.Index>) -> Range<String.Index>` |❓
-`func range(`<br/>`  of: String,`<br/>`  options: String.CompareOptions = default,`<br/>`  range: Range<String.Index>? = default,`<br/>`  locale: Foundation.Locale? = default`<br/>`) -> Range<String.Index>?` |❓
+`func range(`<br/>`  of: String,`<br/>`  options: String.CompareOptions = default,`<br/>`  range: Range<String.Index>? = default,`<br/>`  locale: Locale? = default`<br/>`) -> Range<String.Index>?` |❓
 `func localizedStandardContains(_: String) -> Bool` |❓
-`func localizedStandardRange(of: String) -> Range<String.Index>?` |❓
+`func localizedStandardRange(`<br/>`  of: String`<br/>`) -> Range<String.Index>?` |❓
 `var smallestEncoding: String.Encoding` |❓
-`func addingPercentEncoding(`<br/>`  withAllowedCharacters: Foundation.CharacterSet) -> String?` |❓
+`func addingPercentEncoding(`<br/>`  withAllowedCharacters: CharacterSet) -> String?` |❓
 `func appendingFormat(_: String, _: CVarArg...) -> String` |❓
 `func appending(_: String) -> String` |❓
-`func folding(`<br/>`  options: String.CompareOptions = default,`<br/>`  locale: Foundation.Locale?) -> String` |❓
+`func folding(`<br/>`  options: String.CompareOptions = default,`<br/>`  locale: Locale?) -> String` |❓
 `func padding(`<br/>`  toLength: Int, withPad: String, startingAt: Int) -> String` |❓
 `var removingPercentEncoding: String?` |❓
 `func replacingCharacters(`<br/>`  in: Range<String.Index>, with: String) -> String` |❓
 `func replacingOccurrences(`<br/>`  of: String, with: String,`<br/>`  options: String.CompareOptions = default,`<br/>`  range: Range<String.Index>? = default) -> String` |❓
-`func trimmingCharacters(in: Foundation.CharacterSet) -> String` |❓
+`func trimmingCharacters(in: CharacterSet) -> String` |❓
 `func substring(from: String.Index) -> String` |❓
 `func substring(to: String.Index) -> String` |❓
 `func substring(with: Range<String.Index>) -> String` |❓
 `var localizedUppercase: String` |❓
-`func uppercased(with: Foundation.Locale?) -> String` |❓
-`func write(`<br/>`  toFile: String, atomically: Bool, encoding: String.Encoding) throws` |❓
-`func write(`<br/>`  to: Foundation.URL, atomically: Bool, encoding: String.Encoding) throws` |❓
-`func applyingTransform(`<br/>`  _: Foundation.StringTransform, reverse: Bool) -> String?` |❓
+`func uppercased(with: Locale?) -> String` |❓
+`func write(`<br/>`  toFile: String,`<br/>`  atomically: Bool,`<br/>`  encoding: String.Encoding) throws` |❓
+`func write(`<br/>`  to: URL,`<br/>`  atomically: Bool,`<br/>`  encoding: String.Encoding) throws` |❓
+`func applyingTransform(`<br/>`  _: StringTransform, reverse: Bool) -> String?` |❓
 `func contains(_: String) -> Bool` |❓
 `func localizedCaseInsensitiveContains(_: String) -> Bool` |❓
 `struct Encoding` |❓
