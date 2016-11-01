@@ -658,6 +658,14 @@ think of better ones.
 around because it seemed useful, but it was never truly *designed* for client
 programmers.  We need to decide what happens with it.
 
+### Immutability
+
+Can the basic `StringProtocol` include mutation, or do we also need to have a
+`MutableStringProtocol`? This hinges on whether there are important models of
+`StringProtocol` for which it would be costly to support mutation.  For example,
+it might be hard to build a super-efficient model that could refer to string
+constants in the data segment, if it also needed to support mutation.
+
 ---------------
 
 <b id="f1">1</b> For example, ONE DOT LEADER (u2024) and TWO DOT LEADER (u2025)
