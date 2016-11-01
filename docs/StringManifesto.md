@@ -514,15 +514,15 @@ We are recommending removing this data type in favor of `String` and
 ---|---
 `subscript(bounds: Range<String.Index>) -> String` | ✅ Part of `Sliceable` Protocol, but generic on [`RangeExpression`](https://github.com/brentdax/swift/blob/incomplete-range/stdlib/public/core/RangeExpression.swift.gyb)
 `subscript(bounds: ClosedRange<String.Index>) -> String` |❌Collapsed with the above
-`init<`<br/>`  S : Sequence where S.Iterator.Element == Character`<br/>`>(_: S)` |✅`init<S : StringProtocol>(_: S)`
+`init<S : Sequence>(_: S) where S.Iterator.Element == Character` |✅`init<S : StringProtocol>(_: S)`
 `mutating func reserveCapacity(_: Int)` |⛏️At least rename this; it can only reserve ASCII capacity today.  Probably this should be on the UnicodeScalars.
-`mutating func append<`<br/>`  S : Sequence where S.Iterator.Element == Character`<br/>`  >(contentsOf: S)` |✅`mutating func append<S: StringProtocol>(_: S)`
-`mutating func replaceSubrange<`<br/>`  C where C : Collection, C.Iterator.Element == Character`<br/>`>(_: Range<String.Index>, with: C)` | ✅`mutating func replaceSubrange<S: StringProtocol>(_: Range<String.Index>, with: S)`
-`mutating func replaceSubrange(`<br/>`  _: Range<String.Index>, with: String)` |❓
-`mutating func replaceSubrange<`<br/>`  C where C : Collection, C.Iterator.Element == Character`<br/>`>(`<br/>`  _: ClosedRange<String.Index>, with: C)` |❓
+`mutating func append<S : Sequence>(contentsOf: S) where S.Iterator.Element == Character` |✅`mutating func append<S: StringProtocol>(_: S)`
+`mutating func replaceSubrange<C : Collection>(`<br/>`  _: Range<String.Index>, with: C) where C.Iterator.Element == Character` | ✅`mutating func replaceSubrange<R: RangeExpression, S: StringProtocol>(_: R, with: S) where R: Bound == String.Index`
+`mutating func replaceSubrange(`<br/>`  _: Range<String.Index>, with: String)` |✅`mutating func replaceSubrange<S: StringProtocol>(`<br/>`  _: Range<String.Index>, with: S)`
+`mutating func replaceSubrange<C : Collection>(_: ClosedRange<String.Index>, with: C) where C.Iterator.Element == Character` |❌
 `mutating func replaceSubrange(`<br/>`  _: ClosedRange<String.Index>, with: String)` |❓
 `mutating func insert(_: Character, at: String.Index)` |❓
-`mutating func insert<`<br/>`  S : Collection where S.Iterator.Element == Character`<br/>`>(contentsOf: S, at: String.Index)` |❓
+`mutating func insert<S : Collection>(contentsOf: S, at: String.Index) where S.Iterator.Element == Character` |❓
 `@discardableResult`<br/>`mutating func remove(at: String.Index) -> Character` | ❌️Drop this
 `mutating func removeSubrange(_: Range<String.Index>)` | Cosolidate ranges under a protocol
 `mutating func removeSubrange(`<br/>`  _: ClosedRange<String.Index>)` |❓
@@ -555,7 +555,7 @@ We are recommending removing this data type in favor of `String` and
 `func enumerateLinguisticTags(`<br/>`  in: Range<String.Index>,`<br/>`  scheme: String,`<br/>`  options: NSLinguisticTagger.Options = default,`<br/>`  orthography: NSOrthography? = default,`<br/>`  invoking: (String,`<br/>`  Range<String.Index>,`<br/>`  Range<String.Index>, inout Bool) -> ())` | ❓LinguisticTagger
  `var fastestEncoding: String.Encoding` | ↗️StringEncoding init
 `func getBytes(`<br/>`  _: inout [UInt8],`<br/>`  maxLength: Int,`<br/>`  usedLength: UnsafeMutablePointer<Int>,`<br/>`  encoding: String.Encoding,`<br/>`  options: String.EncodingConversionOptions = default,`<br/>`  range: Range<String.Index>,`<br/>`  remaining: UnsafeMutablePointer<Range<String.Index>>`<br/>`) -> Bool` | ❓Encoding/Decoding
-`init?<`<br/>`  S : Sequence where S.Iterator.Element == UInt8`<br/>`  >(bytes: S, encoding: String.Encoding)` |❓
+`init?<S : Sequence>(bytes: S, encoding: String.Encoding) where S.Iterator.Element == UInt8` |❓
 `init?(`<br/>`  bytesNoCopy: UnsafeMutableRawPointer,`<br/>`  length: Int,`<br/>`  encoding: String.Encoding,`<br/>`  freeWhenDone: Bool)` |❓
 `init(`<br/>`  utf16CodeUnits: UnsafePointer<unichar>,`<br/>`  count: Int)` |❓
 `var hash: Int` | We should kill off the incorrect == behavior and associated hash
