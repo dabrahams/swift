@@ -386,6 +386,7 @@ issues:
 `init(cString: UnsafePointer<CChar>)` | ❓we should do something about CChar-vs-UInt8
 `init(cString: UnsafePointer<UInt8>)` | ❓
 `init?(validatingUTF8: UnsafePointer<CChar>)` | ❓probably OK
+`init?(utf8String: UnsafePointer<CChar>)` | ❌Duplicates the above(?)
 `static func decodeCString<Encoding : UnicodeCodec>(`<br/>`  _: UnsafePointer<Encoding.CodeUnit>?,`<br/>`  as: Encoding.Type,`<br/>`  repairingInvalidCodeUnits: Bool = default`<br/>`) -> (result: String, repairsMade: Bool)?` | ✅Would be an init except for repairsMade
 `func withCString<Result>(`<br/>`  _: (UnsafePointer<Int8>) throws -> Result`<br/>`) rethrows -> Result` |❓
 `var utf8CString: ContiguousArray<CChar>` | ❓Reevaluate all CString APIs
@@ -403,8 +404,18 @@ issues:
 `init(_: String)` | ❓Should be resolved the same way as other "copy initializers" for value types
 `func lowercased() -> String` |✅
 `func uppercased() -> String` |✅
+`var capitalized: String` |✅
+`var localizedCapitalized: String` | ↗️ `Text`
+`func capitalized(with: Locale?) -> String` |↗️ `Text`
 `init<T : LosslessStringConvertible>(_: T)` |✅
 `init?(_: String)` |❓Why do we have this?
+
+### Outside String Domain
+
+**API** | **Suggested Disposition**
+:-------- | :-------
+`func completePath(`<br/>`  into: UnsafeMutablePointer<String>? = default,`<br/>`  caseSensitive: Bool,`<br/>`  matchesInto: UnsafeMutablePointer<[String]>? = default,`<br/>`  filterTypes: [String]? = default`<br/>`) -> Int` | ↗️
+`func data(`<br/>`  using: Encoding,`<br/>`  allowLossyConversion: Bool = default`<br/>`) -> Data?` | ↗️Should be a failable `Data.init`
 
 ### `Character` Data Type Support
 
@@ -417,6 +428,7 @@ We are recommending removing this data type in favor of `String` and
 `mutating func append(_: Character)` | ❌
 `init(extendedGraphemeClusterLiteral: String)` |❌
 `typealias ExtendedGraphemeClusterLiteralType = String` |❌
+`mutating func insert(_: Character, at: Index)` |❌
 
 ### `TextOutputStreamable` and `TextOutputStream` Support
 
@@ -443,12 +455,17 @@ We are recommending removing this data type in favor of `String` and
 `mutating func withMutableCharacters<R>(`<br/>`  _: (inout CharacterView) -> R) -> R` | ❌ Expected to be obsoleted by better `inout` support.
 `init(_: CharacterView)` | ✅ Not strictly needed; we can assign to the `characters` of an empty string.<br/>We can also do `characters.joined(separator: "")` if the elements are `String`s.
 
-### Comparison and Collation
+### Comparison, Collation, and Matching
 
 **API** | **Suggested Disposition**
 ---|---
 `static func <(lhs: String, rhs: String) -> Bool` |❓
 `var hashValue: Int` |✅
+`func caseInsensitiveCompare(`<br/>`  _: String) -> ComparisonResult` |❓
+`func commonPrefix(`<br/>`  with: String,`<br/>`  options: CompareOptions = default`<br/>`) -> String` | Replace with mismatch
+`func compare(`<br/>`  _: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default,`<br/>`  locale: Locale? = default`<br/>`) -> ComparisonResult` |❓
+`func components(`<br/>`  separatedBy: CharacterSet`<br/>`) -> [String]` | Split
+`func components(separatedBy: String) -> [String]` |❓
 
 
 ### Formatting
@@ -457,6 +474,9 @@ We are recommending removing this data type in favor of `String` and
 ---|---
 `var debugDescription: String` |❓
 `var description: String` |❓
+`init<Subject>(describing: Subject)` |❓
+`init<Subject>(reflecting: Subject)` |❓
+`static func localizedStringWithFormat(`<br/>`  _: String, _: CVarArg...) -> String` | ❌️Kill off printf-style interface
 
 ### Literal Convertibility
 
@@ -497,7 +517,7 @@ We are recommending removing this data type in favor of `String` and
 `var startIndex: Index` |❓
 `var endIndex: Index` |❓
 
-### Obsoleted Because String Is Not a Collection
+### Obsolete Because String Is Not a Collection
 
 **API** | **Suggested Disposition**
 ---|---
@@ -508,50 +528,56 @@ We are recommending removing this data type in favor of `String` and
 `func index(`<br/>`  _: Index,`<br/>`  offsetBy: IndexDistance,`<br/>`  limitedBy: Index) -> Index?` |❌
 `func distance(`<br/>`  from: Index, to: Index) -> IndexDistance` |❌
 `subscript(i: Index) -> Character` |❌
+`mutating func replaceSubrange<C : Collection>(`<br/>`  _: Range<Index>, with: C) where C.Iterator.Element == Character` | ❌
+`mutating func replaceSubrange<C : Collection>(_: ClosedRange<Index>, with: C) where C.Iterator.Element == Character` |❌Collapsed with the above
+`@discardableResult`<br/>`mutating func remove(at: Index) -> Character` | ❌
 
+### Sliceable
 
 **API** | **Suggested Disposition**
 ---|---
-`subscript(bounds: Range<Index>) -> String` | ✅ Part of `Sliceable` Protocol, but generic on [`RangeExpression`](https://github.com/brentdax/swift/blob/incomplete-range/stdlib/public/core/RangeExpression.swift.gyb)
+`subscript(bounds: Range<Index>) -> String` | ✅ `subscript<R: RangeExpression>(bounds: R) -> String`<br/>`  where R.Bound == Index`
 `subscript(bounds: ClosedRange<Index>) -> String` |❌Collapsed with the above
+
+### RangeReplaceable
+
+**API** | **Suggested Disposition**
+---|---
 `init<S : Sequence>(_: S) where S.Iterator.Element == Character` |✅`init<S : StringProtocol>(_: S)`
 `mutating func reserveCapacity(_: Int)` |⛏️At least rename this; it can only reserve ASCII capacity today.  Probably this should be on the UnicodeScalars.
 `mutating func append<S : Sequence>(contentsOf: S) where S.Iterator.Element == Character` |✅`mutating func append<S: StringProtocol>(_: S)`
-`mutating func replaceSubrange<C : Collection>(`<br/>`  _: Range<Index>, with: C) where C.Iterator.Element == Character` | ✅`mutating func replaceSubrange<R: RangeExpression, S: StringProtocol>(_: R, with: S) where R: Bound == Index`
-`mutating func replaceSubrange(`<br/>`  _: Range<Index>, with: String)` |✅`mutating func replaceSubrange<S: StringProtocol>(`<br/>`  _: Range<Index>, with: S)`
-`mutating func replaceSubrange<C : Collection>(_: ClosedRange<Index>, with: C) where C.Iterator.Element == Character` |❌
-`mutating func replaceSubrange(`<br/>`  _: ClosedRange<Index>, with: String)` |❓
-`mutating func insert(_: Character, at: Index)` |❓
+`mutating func replaceSubrange(`<br/>`  _: Range<Index>, with: String)` |✅`mutating func replaceSubrange<R: RangeExpression, S: StringProtocol>(_: R, with: S)`<br/>`  where R: Bound == Index`
+`mutating func replaceSubrange(`<br/>`  _: ClosedRange<Index>, with: String)` |❌Collapsed with the above
 `mutating func insert<S : Collection>(contentsOf: S, at: Index) where S.Iterator.Element == Character` |❓
-`@discardableResult`<br/>`mutating func remove(at: Index) -> Character` | ❌️Drop this
-`mutating func removeSubrange(_: Range<Index>)` | Cosolidate ranges under a protocol
-`mutating func removeSubrange(`<br/>`  _: ClosedRange<Index>)` |❓
-`mutating func removeAll(keepingCapacity: Bool = default)` |❓
-`init<Subject>(describing: Subject)` |❓
-`init<Subject>(reflecting: Subject)` |❓
-`static var defaultCStringEncoding: Encoding` | ↗️Move these onto StringEncoding (UnicodeEncoding?)
+`mutating func removeSubrange(_: Range<Index>)` | `mutating func removeSubrange<R: RangeExpression>(_: R)`<br/>`  where R: Bound == Index`
+`mutating func removeSubrange(`<br/>`  _: ClosedRange<Index>)` |❌Collapsed with the above
+`mutating func removeAll(keepingCapacity: Bool = default)` |✅
+
+### Encodings
+
+**API** | **Suggested Disposition**
+---|---
+`static var defaultCStringEncoding: Encoding` | ↗️Move to `StringEncoding` (`UnicodeEncoding`?)
+`func canBeConverted(to: Encoding) -> Bool` | ↗️Move to `StringEncoding`: `e.canRepresent(s)`
 `static func localizedName(of: Encoding) -> String` |❓
-`static func localizedStringWithFormat(`<br/>`  _: String, _: CVarArg...) -> String` | ❌️Kill off printf-style interface
-`init?(utf8String: UnsafePointer<CChar>)` | ❓Duplicates init(cString:)?
-`func canBeConverted(to: Encoding) -> Bool` | ↗️Move to StringEncoding:  e.canRepresent(s)
-`var capitalized: String` |❓
-`var localizedCapitalized: String` | ❓Locales->Text
-`func capitalized(with: Locale?) -> String` |❓
-`func caseInsensitiveCompare(`<br/>`  _: String) -> ComparisonResult` |❓
-`func commonPrefix(`<br/>`  with: String,`<br/>`  options: CompareOptions = default`<br/>`) -> String` | Replace with mismatch
-`func compare(`<br/>`  _: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default,`<br/>`  locale: Locale? = default`<br/>`) -> ComparisonResult` |❓
-`func completePath(`<br/>`  into: UnsafeMutablePointer<String>? = default,`<br/>`  caseSensitive: Bool,`<br/>`  matchesInto: UnsafeMutablePointer<[String]>? = default,`<br/>`  filterTypes: [String]? = default`<br/>`) -> Int` | ↗️Transplant
-`func components(`<br/>`  separatedBy: CharacterSet`<br/>`) -> [String]` | Split
-`func components(separatedBy: String) -> [String]` |❓
-`func data(`<br/>`  using: Encoding,`<br/>`  allowLossyConversion: Bool = default`<br/>`) -> Data?` | ↗️Should be a failable `Data.init`
+
+### Unicode
+
+**API** | **Suggested Disposition**
+---|---
 `var decomposedStringWithCanonicalMapping: String` | ❓Undecided
 `var decomposedStringWithCompatibilityMapping: String` |❓
 `var precomposedStringWithCanonicalMapping: String` |❓
 `var precomposedStringWithCompatibilityMapping: String` |❓
-`func enumerateLines(`<br/>`  invoking: @escaping (String, inout Bool) -> ())` |❓
+
+### Orthography
+
+**API** | **Suggested Disposition**
+---|---
+`func enumerateLines(`<br/>`  invoking: @escaping (String, inout Bool) -> ())` |`for l in s.lines {...}` (`Collection` of `Substring`)
 `func getLineStart(`<br/>`  _: UnsafeMutablePointer<Index>,`<br/>`  end: UnsafeMutablePointer<Index>,`<br/>`  contentsEnd: UnsafeMutablePointer<Index>,`<br/>`  for: Range<Index>)` |❓
 `func getParagraphStart(`<br/>`  _: UnsafeMutablePointer<Index>,`<br/>`  end: UnsafeMutablePointer<Index>,`<br/>`  contentsEnd: UnsafeMutablePointer<Index>,`<br/>`  for: Range<Index>)` |❓
-`func enumerateSubstrings(`<br/>`  in: Range<Index>,`<br/>`  options: EnumerationOptions = default,`<br/>`  _: @escaping (`<br/>`    String?,`<br/>`  Range<Index>,`<br/>`  Range<Index>,`<br/>`  inout Bool) -> ())` | ❓Should be one or more collection/sequence properties
+`func enumerateSubstrings(`<br/>`  in: Range<Index>,`<br/>`  options: EnumerationOptions = default,`<br/>`  _: @escaping (`<br/>`    String?,`<br/>`  Range<Index>,`<br/>`  Range<Index>,`<br/>`  inout Bool) -> ())` | ❓Should be one or more collection/sequence properties. `EnumerationOptions` is documented [here](https://developer.apple.com/reference/foundation/nsstring.enumerationoptions).
 `func enumerateLinguisticTags(`<br/>`  in: Range<Index>,`<br/>`  scheme: String,`<br/>`  options: NSLinguisticTagger.Options = default,`<br/>`  orthography: NSOrthography? = default,`<br/>`  invoking: (String,`<br/>`  Range<Index>,`<br/>`  Range<Index>, inout Bool) -> ())` | ❓LinguisticTagger
  `var fastestEncoding: Encoding` | ↗️StringEncoding init
 `func getBytes(`<br/>`  _: inout [UInt8],`<br/>`  maxLength: Int,`<br/>`  usedLength: UnsafeMutablePointer<Int>,`<br/>`  encoding: Encoding,`<br/>`  options: EncodingConversionOptions = default,`<br/>`  range: Range<Index>,`<br/>`  remaining: UnsafeMutablePointer<Range<Index>>`<br/>`) -> Bool` | ❓Encoding/Decoding
