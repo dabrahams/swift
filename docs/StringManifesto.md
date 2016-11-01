@@ -660,7 +660,9 @@ programmers.  We need to decide what happens with it.
 
 ---------------
 
-<b id="f1">1</b> For example, ONE DOT LEADER (u2024) and TWO DOT LEADER (u2025) are both complete grapheme clusters, but according to Unicode, `"\u{2024}\u{2024}"` is equivalent to `"\u{2025}"`. [↩](#a1)
+<b id="f1">1</b> For example, ONE DOT LEADER (u2024) and TWO DOT LEADER (u2025)
+are both complete grapheme clusters, but according to Unicode,
+`"\u{2024}\u{2024}"` is equivalent to `"\u{2025}"`. [↩](#a1)
 
 
 <!-- Local Variables: -->
