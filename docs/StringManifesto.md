@@ -193,6 +193,7 @@ stuck with what's in the box.
 
 The design pattern used by the core Foundation formatters demands more from
 users than it should:
+
   * Matching the type of data being formatted to a formatter type
   * Creating an instance of that type
   * Setting stateful options (`currency`, `dateStyle`) on the type.  Note: the
