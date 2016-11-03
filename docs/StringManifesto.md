@@ -365,7 +365,7 @@ issues:
     `subscript` overloads and a bunch of `prefix` and `suffix` methods.
   * Adopt a version
     of
-    [this proposal](https://github.com/pyrtsa/swift-evolution/blob/ca89e7b3a1dffc99baa695a03544fcba75afd0f3/proposals/NNNN-formalized-ordering.md) (implemented
+    [this proposal](https://gist.github.com/CodaFi/f0347bd37f1c407bf7ea0c429ead380e) (implemented
     by [these changes](https://github.com/dabrahams/swift/pull/1)) that uses a
     `s1.compare(s2)` method (rather than a “spaceship operator” `<=>`, which has
     only a very weak advantage in that it can be defined in the library for
