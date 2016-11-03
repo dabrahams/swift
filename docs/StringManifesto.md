@@ -403,18 +403,18 @@ issues:
 `var customPlaygroundQuickLook: PlaygroundQuickLook` | ↗️Move CustomPlaygroundQuickLookable to PlaygroundSupport library
 `init(_: String)` | ❓Should be resolved the same way as other "copy initializers" for value types
 `func uppercased() -> String` |✅
-`var localizedLowercase: String` |❓
-`func lowercased(with: Locale?) -> String` |❓
+`var localizedLowercase: String` |↗️ `Text`
+`func lowercased(with: Locale?) -> String` |❌subsumed into the above
 `var capitalized: String` |✅
 `var localizedCapitalized: String` | ↗️ `Text`
-`func capitalized(with: Locale?) -> String` |↗️ `Text`
-`var localizedUppercase: String` |❓
-`func uppercased(with: Locale?) -> String` |❓
+`func capitalized(with: Locale?) -> String` |❌subsumed into the above
+`var localizedUppercase: String` |↗️ `Text`
+`func uppercased(with: Locale?) -> String` |❌subsumed into the above
 `init<T : LosslessStringConvertible>(_: T)` |✅
 `init?(_: String)` |❓Why do we have this?
 `init?(`<br/>`  bytesNoCopy: UnsafeMutableRawPointer,`<br/>`  length: Int,`<br/>`  encoding: Encoding,`<br/>`  freeWhenDone: Bool)` |❓
 `var hash: Int` | ❌We should kill off the incorrect `==` behavior and associated hash
-`func folding(`<br/>`  options: CompareOptions = default,`<br/>`  locale: Locale?) -> String` |❓Swiss army knife
+`func folding(`<br/>`  options: CompareOptions = default,`<br/>`  locale: Locale?) -> String` |❓Swiss army knife; locale parameter would drop at least
 `func applyingTransform(`<br/>`  _: StringTransform, reverse: Bool) -> String?` |❓Swiss army knife
 
 ### Outside String Domain
@@ -424,17 +424,17 @@ issues:
 `func completePath(`<br/>`  into: UnsafeMutablePointer<String>? = default,`<br/>`  caseSensitive: Bool,`<br/>`  matchesInto: UnsafeMutablePointer<[String]>? = default,`<br/>`  filterTypes: [String]? = default`<br/>`) -> Int` | ↗️
 `func data(`<br/>`  using: Encoding,`<br/>`  allowLossyConversion: Bool = default`<br/>`) -> Data?` | ↗️Should be a failable `Data.init`
 `init(`<br/>`  contentsOfFile: String,`<br/>`  encoding: Encoding) throws` | ↗️Undecided, but definitely belongs elsewhere.  Why do we have path Strings
-`init(`<br/>`  contentsOfFile: String, usedEncoding: inout Encoding`<br/>`) throws` |❓
-`init(contentsOfFile: String) throws` |❓
-`init(`<br/>`  contentsOf: URL,`<br/>`  encoding: Encoding) throws` |❓
-`init(`<br/>`  contentsOf: URL,`<br/>`  usedEncoding: inout Encoding`<br/>`) throws` |❓
+`init(`<br/>`  contentsOfFile: String, usedEncoding: inout Encoding`<br/>`) throws` |↗️
+`init(contentsOfFile: String) throws` |↗️
+`init(`<br/>`  contentsOf: URL,`<br/>`  encoding: Encoding) throws` |↗️
+`init(`<br/>`  contentsOf: URL,`<br/>`  usedEncoding: inout Encoding`<br/>`) throws` |↗️
 `init(contentsOf: URL) throws` |❓
-`func write(`<br/>`  toFile: String,`<br/>`  atomically: Bool,`<br/>`  encoding: Encoding) throws` |❓
-`func write(`<br/>`  to: URL,`<br/>`  atomically: Bool,`<br/>`  encoding: Encoding) throws` |❓
-`func propertyList() -> Any` |❓
-`func propertyListFromStringsFileFormat()`<br/>`  -> [String : String]` |❓
-`func addingPercentEncoding(`<br/>`  withAllowedCharacters: CharacterSet) -> String?` |❓
-`var removingPercentEncoding: String?` |❓
+`func write(`<br/>`  toFile: String,`<br/>`  atomically: Bool,`<br/>`  encoding: Encoding) throws` |↗️
+`func write(`<br/>`  to: URL,`<br/>`  atomically: Bool,`<br/>`  encoding: Encoding) throws` |↗️
+`func propertyList() -> Any` |↗️
+`func propertyListFromStringsFileFormat()`<br/>`  -> [String : String]` |↗️
+`func addingPercentEncoding(`<br/>`  withAllowedCharacters: CharacterSet) -> String?` |↗️
+`var removingPercentEncoding: String?` |↗️
 
 ### `Character` Data Type Support
 
@@ -484,19 +484,19 @@ We are recommending removing this data type in favor of `String` and
 `typealias CompareOptions =` ... |❓
 `func commonPrefix(`<br/>`  with: String,`<br/>`  options: CompareOptions = default`<br/>`) -> String` | Replace with mismatch
 `func compare(`<br/>`  _: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default,`<br/>`  locale: Locale? = default`<br/>`) -> ComparisonResult` |❓
-`func components(`<br/>`  separatedBy: CharacterSet`<br/>`) -> [String]` | Split
+`func components(`<br/>`  separatedBy: CharacterSet`<br/>`) -> [String]` | `split`
 `func components(separatedBy: String) -> [String]` |❓
-`func localizedCaseInsensitiveCompare(`<br/>`  _: String) -> ComparisonResult` |❓
-`func localizedCompare(`<br/>`  _: String) -> ComparisonResult` |❓
-`func localizedStandardCompare(`<br/>`  _: String) -> ComparisonResult` |❓
+`func localizedCaseInsensitiveCompare(`<br/>`  _: String) -> ComparisonResult` |↗️ `Text`
+`func localizedCompare(`<br/>`  _: String) -> ComparisonResult` |↗️ `Text`
+`func localizedStandardCompare(`<br/>`  _: String) -> ComparisonResult` |↗️ `Text`
 `func rangeOfCharacter(`<br/>`  from: CharacterSet,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default`<br/>`) -> Range<Index>?` |❓
 `func range(`<br/>`  of: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default,`<br/>`  locale: Locale? = default`<br/>`) -> Range<Index>?` |❓
-`func localizedStandardContains(_: String) -> Bool` |❓
-`func localizedStandardRange(`<br/>`  of: String`<br/>`) -> Range<Index>?` |❓
+`func localizedStandardContains(_: String) -> Bool` |↗️ `Text`
+`func localizedStandardRange(`<br/>`  of: String`<br/>`) -> Range<Index>?` |↗️ `Text`
 `func replacingOccurrences(`<br/>`  of: String, with: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default) -> String` |❓
 `func trimmingCharacters(in: CharacterSet) -> String` |❓
 `func contains(_: String) -> Bool` |❓
-`func localizedCaseInsensitiveContains(_: String) -> Bool` |❓
+`func localizedCaseInsensitiveContains(_: String) -> Bool` |↗️ `Text`
 
 ### Formatting
 
@@ -506,7 +506,7 @@ We are recommending removing this data type in favor of `String` and
 `var description: String` |❓
 `init<Subject>(describing: Subject)` |❓
 `init<Subject>(reflecting: Subject)` |❓
-`static func localizedStringWithFormat(`<br/>`  _: String, _: CVarArg...) -> String` | ❌
+`static func localizedStringWithFormat(`<br/>`  _: String, _: CVarArg...) -> String` | ❌`printf`-style formatting must go
 `init(format: String, _: CVarArg...)` |❌
 `init(format: String, arguments: [CVarArg])` |❌
 `init(`<br/>`  format: String,`<br/>`  locale: Locale?,`<br/>`  _: CVarArg...)` |❌
