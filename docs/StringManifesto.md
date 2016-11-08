@@ -52,21 +52,21 @@ Foundation, simply to show that both contribute significantly to overall
 complexity:
 
 **Source** | `init` | `func` | `subscript` | `var`
----|---
+---|---|---|---|---
 Standard Library | 41 | 42 | 9 | 26
 Foundation | 18 | 55 | 0 | 14
 
 Method arity lines up as follows:
 
 **Arity** | **Standard Library** | **Foundation**
----|---
-0: `ƒ()` | 5 | 7 |
-1: `ƒ(:)` | 19 | 48 |
-2: `ƒ(::)` | 13 | 19 |
-3: `ƒ(:::)` | 5 | 11 |
-4: `ƒ(::::)` | 1 | 7 |
-5: `ƒ(:::::)` | - | 2 |
-6: `ƒ(::::::)` | - | 1 |
+---|---|---
+0: `ƒ()` | 5 | 7
+1: `ƒ(:)` | 19 | 48
+2: `ƒ(::)` | 13 | 19
+3: `ƒ(:::)` | 5 | 11
+4: `ƒ(::::)` | 1 | 7
+5: `ƒ(:::::)` | - | 2
+6: `ƒ(::::::)` | - | 1
 
 I consider this unacceptable. By contrast, `Int` in Swift 3.0 (*predating* the
 new integers proposal that will eliminate much of its API surface area) has 80
@@ -368,10 +368,11 @@ issues:
     of
     [this proposal](https://gist.github.com/CodaFi/f0347bd37f1c407bf7ea0c429ead380e) (implemented
     by [these changes](https://github.com/dabrahams/swift/pull/1)) that uses a
-    `s1.compare(s2)` method. <sup id="a2">[2](#f2)</sup> This will give us a platform to implement methods
-    with additional, defaulted arguments, e.g. `s1.compare(s2, caseInsensitive: true)`, 
-    thereby unifying comparisons.
-    
+    `s1.compare(s2)` method. <sup id="a2">[2](#f2)</sup> This will give us a
+    platform to implement methods with additional, defaulted arguments,
+    e.g. `s1.compare(s2, caseInsensitive: true)`, thereby unifying comparisons.
+*   Use separate types for localized operations and non-localized text.  More on
+    that in the next section.
     
 ## Existing String API and Suggested Disposition
 
@@ -491,7 +492,7 @@ We are recommending removing this data type in favor of `String` and
 `func localizedCompare(`<br/>`  _: String) -> ComparisonResult` |↗️ `Text`
 `func localizedStandardCompare(`<br/>`  _: String) -> ComparisonResult` |↗️ `Text`
 `func rangeOfCharacter(`<br/>`  from: CharacterSet,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default`<br/>`) -> Range<Index>?` |❓
-`func range(`<br/>`  of: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default,`<br/>`  locale: Locale? = default`<br/>`) -> Range<Index>?` |❓
+`func range(`<br/>`  of: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default,`<br/>`  locale: Locale? = default`<br/>`) -> Range<Index>?` |❌subsumed into the above
 `func localizedStandardContains(_: String) -> Bool` |↗️ `Text`
 `func localizedStandardRange(`<br/>`  of: String`<br/>`) -> Range<Index>?` |↗️ `Text`
 `func replacingOccurrences(`<br/>`  of: String, with: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default) -> String` |❓
