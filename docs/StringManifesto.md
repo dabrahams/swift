@@ -368,12 +368,9 @@ issues:
     of
     [this proposal](https://gist.github.com/CodaFi/f0347bd37f1c407bf7ea0c429ead380e) (implemented
     by [these changes](https://github.com/dabrahams/swift/pull/1)) that uses a
-    `s1.compare(s2)` method (rather than a “spaceship operator” `<=>`, which has
-    only a very weak advantage in that it can be defined in the library for
-    tuples but is insufficient to let tuples conform to a protocol).  This will
-    give us a platform to implement methods with additional, defaulted
-    arguments, e.g. `s1.compare(s2, caseInsensitive: true)`, thereby unifying
-    comparisons.
+    `s1.compare(s2)` method. <sup id="a2">[2](#f2)</sup> This will give us a platform to implement methods
+    with additional, defaulted arguments, e.g. `s1.compare(s2, caseInsensitive: true)`, 
+    thereby unifying comparisons.
     
     
 ## Existing String API and Suggested Disposition
@@ -413,12 +410,15 @@ issues:
 `func uppercased(with: Locale?) -> String` |❌subsumed into the above
 `init<T : LosslessStringConvertible>(_: T)` |✅
 `init?(_: String)` |❓Why do we have this?
-`init?(`<br/>`  bytesNoCopy: UnsafeMutableRawPointer,`<br/>`  length: Int,`<br/>`  encoding: Encoding,`<br/>`  freeWhenDone: Bool)` |❓
+`init?(`<br/>`  bytesNoCopy: UnsafeMutableRawPointer,`<br/>`  length: Int,`<br/>`  encoding: Encoding,`<br/>`  freeWhenDone: Bool)` |❓My main question about this API is whether it should be a top-level API on String, or whether it should be something like `String(SomeSpecificModelOfStringProtocol(...))`.
 `var hash: Int` | ❌We should kill off the incorrect `==` behavior and associated hash
 `func folding(`<br/>`  options: CompareOptions = default,`<br/>`  locale: Locale?) -> String` |❓Swiss army knife; locale parameter would drop at least
 `func applyingTransform(`<br/>`  _: StringTransform, reverse: Bool) -> String?` |❓Swiss army knife
 
 ### Outside String Domain
+
+Everything in this category should have an API that's not expressed in terms of
+string methods and properties.
 
 **API** | **Suggested Disposition**
 :-------- | :-------
@@ -429,7 +429,7 @@ issues:
 `init(contentsOfFile: String) throws` |↗️
 `init(`<br/>`  contentsOf: URL,`<br/>`  encoding: Encoding) throws` |↗️
 `init(`<br/>`  contentsOf: URL,`<br/>`  usedEncoding: inout Encoding`<br/>`) throws` |↗️
-`init(contentsOf: URL) throws` |❓
+`init(contentsOf: URL) throws` |↗️
 `func write(`<br/>`  toFile: String,`<br/>`  atomically: Bool,`<br/>`  encoding: Encoding) throws` |↗️
 `func write(`<br/>`  to: URL,`<br/>`  atomically: Bool,`<br/>`  encoding: Encoding) throws` |↗️
 `func propertyList() -> Any` |↗️
@@ -550,9 +550,9 @@ We are recommending removing this data type in favor of `String` and
 **API** | **Suggested Disposition**
 ---|---
 `init(repeating: String, count: Int)` | ✅ Slightly useful
-`typealias Index = CharacterView.Index` |❓
-`var startIndex: Index` |❓
-`var endIndex: Index` |❓
+`typealias Index = CharacterView.Index` |✅
+`var startIndex: Index` |✅
+`var endIndex: Index` |✅
 
 ### Obsolete Because String Is Not a Collection
 
@@ -671,7 +671,8 @@ mechanism.  In fact, we have no data on whether using `TextOutputStream` is even
 currently a performance win, and I am not sure what experiments might be needed
 in order to find out.
 
-One thing is clear: if we do keep it, 
+One thing is clear: if we do keep it, it must not traffic in `String` directly,
+at the lowest level.
 
 ### `description` and `debugDescription`
 
@@ -696,7 +697,9 @@ Can the basic `StringProtocol` include mutation, or do we also need to have a
 `MutableStringProtocol`? This hinges on whether there are important models of
 `StringProtocol` for which it would be costly to support mutation.  For example,
 it might be hard to build a super-efficient model that could refer to string
-constants in the data segment, if it also needed to support mutation.
+constants in the data segment, if it also needed to support mutation.  I
+currently believe the answer here is **yes, we do need both** mutable and
+immutable string protocols.
 
 ---------------
 
@@ -704,7 +707,10 @@ constants in the data segment, if it also needed to support mutation.
 are both complete grapheme clusters, but according to Unicode,
 `"\u{2024}\u{2024}"` is equivalent to `"\u{2025}"`. [↩](#a1)
 
-
+<b id="f1">2</b> rather than a “spaceship operator” `<=>`, which has
+    only a very weak advantage in that it can be defined in the library for
+    tuples but is insufficient to let tuples conform to a protocol. [↩](#a2)
+    
 <!-- Local Variables: -->
 <!-- eval: (buffer-face-mode 1) -->
 <!-- End: -->
