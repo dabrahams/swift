@@ -76,19 +76,65 @@ much more manageable.
 String processing is a complex domain, but that's all the *more
 reason* we should present an API that's easy to grasp.
 
-### Where's my API?
 
-While `String` is available to all programs out-of-the-box, crucial APIs for
-basic string processing tasks are still inaccessible until `Foundation` is
-imported.  While it makes sense that `Foundation` is needed for domain-specific
-jobs such as
-[linguistic tagging](https://developer.apple.com/reference/foundation/nslinguistictagger),
-one should not need to import anything to, for example, do case-insensitive
-comparison.
+### Strings, Collections, and Elements
 
-### Strings Shouldn't Really Have Elements
+Although Swift 2.0 changed `String` so that it does not conform to `Collection`,
+`String`'s API still elevates `Character`s to special status:
 
-A `String` does not act like a `Collection` of anything:
+```swift
+var i = s.startIndex
+s[i]                   // Equivalent to s.characters.first!
+s.formIndex(after: &i) // Moves i past the first Character
+```
+
+This leads to some confusion:
+
+ - `Character` is an overloaded/vague term of art across programming
+   languages. In Swift, it means a grapheme. In many languages/frameworks it
+   _sort of_ means a scalar. This leads to trouble. For example Foundation's
+   `CharacterSet` does not operate on `Swift.Characters`, it takes a
+   `UnicodeScalar`.
+ - The implication of `Character` as an element is it is the lowest level unit,
+   when in practice graphemes are made up of other elements which can stand
+   alone as well (for example, the family emoji is composed of people)
+ - Juxtaposing two `Character`s change each others behavior – something that's
+   not expected of discrete elements in a collection.
+ - The presence of a specific type for string elements encourages users to do
+   character-by-character string analysis, something we want to discourage.
+ - Various methods, such as `append`, need two versions: one that takes a
+   `Character`, and one that takes a `String`.
+ 
+That said, `String` being a `Collection` has real benefits:
+
+ - Strings are indexable, and it would be better to avoid a proliferation of
+   protocols to capture this indexability independent of collections.
+ - Unicode string indices do have a natural "step" of a grapheme, even if you
+   can also index the interior of those graphemes.
+ - Sometimes you do want to iterate over characters, and we making this
+   needlessly difficult seems extreme. We should provide higher-level APIs and
+   encourage, but not force, their use.
+ - If we want to operate generically across multiple similar string types
+   (`String`, `Substring`, `UTF8String`) we need a common associated type across
+   them, and `Element` is a good candidate.
+
+Recommendation:
+
+ - `String` Becomes a `Collection` again
+ - The `Character` type is eliminated
+ - The `Element` of `String` is `Substring`
+ - `String.index(after:)` should advance to the next grapheme, even when the
+   index points to part-way through a grapheme.
+ - Similarly, `index(before:)` should move to the start of the grapheme before
+   the current position.
+
+
+Because some strings that should be equal have unequal numbers of
+characters,<sup id="a1">[1](#f1)</sup> processing one character at a time is almost always a bug, and the
+fact that such cases are rare means the bug is unlikely to be caught in testing.
+
+Even though it shares many operations with `RangeReplaceableCollection`, a
+`String` does not conform to that protocol:
 
 ```swift
 // Not a Collection of Characters
@@ -102,29 +148,9 @@ A `String` does not act like a `Collection` of anything:
 "e\u{301}" == "\u{e9}"             // true
 ```
 
-Although Swift 2.0 correctly changed `String` so that it does not conform to
-`Collection` , `String`'s API still elevates `Character`s to special status:
-
-```swift
-var i = s.startIndex
-s[i]                   // Equivalent to s.characters.first!
-s.formIndex(after: &i) // Moves i past the first Character
-```
-
-Exposing fine-grained `Character` traversal at the top level of the `String` API
-is conceptually wrong, and encourages users to do character-by-character string
-analysis.  Because some strings that should be equal have unequal numbers of
-characters,<sup id="a1">[1](#f1)</sup> processing one character at a time is almost always a bug, and the
-fact that such cases are rare means the bug is unlikely to be caught in testing.
-
-The right model for `String` is more like a roll of cookie dough with some rocks
-hidden in it: a continuous thing that can be sliced into shorter things, but
-only in certain places, and with no discernable unit of subdivision.
-
-- Note: Today, `String` *may appear* to act like a `Collection` of `Character`s (but
-  not a `RangeReplaceableCollection`) because of a bug (see the section
-  titled
-  [We Don't Implement Comparison Correctly](#we-dont-implement-comparison-correctly).
+Inserting into a `String` is in some ways like inserting into a `Set`: what
+actually happens depends on what's in the `String` and the content you're
+inserting.
 
 ### String Lacks Swifty APIs For Scanning, Matching, and Tokenization
 
@@ -135,7 +161,29 @@ example, it should be easy to cleanly express, “if this string starts with
 `"f"`, process the rest of the string as follows…”  Swift is well-suited to
 expressing this common pattern beautifully; we just need to add the APIs.
 
-### Slicing Operations are not Syntactically/Semantically Unified
+```swift
+if let digit = s.droppingPrefix(matching: regex("[0-9]")) {
+  somethingWith(s) // process the rest of s 
+}
+
+if let (start, rest) = s.removingPrefix(Int.self) {
+   ...
+}
+```
+
+### Where's my API?
+
+#### Foundation
+
+While `String` is available to all programs out-of-the-box, crucial APIs for
+basic string processing tasks are still inaccessible until `Foundation` is
+imported.  While it makes sense that `Foundation` is needed for domain-specific
+jobs such as
+[linguistic tagging](https://developer.apple.com/reference/foundation/nslinguistictagger),
+one should not need to import anything to, for example, do case-insensitive
+comparison.
+
+#### Slicing Operations are not Syntactically/Semantically Unified
 
 Creating substrings is a basic part of String processing, but the slicing
 operations that we have in Swift are all over the map: 
@@ -152,6 +200,24 @@ operations that we have in Swift are all over the map:
         s.prefix(upTo: i).readOnly()
     ```
 
+#### Composition
+
+Many of the current methods are overloaded to do the same logical operations in
+different ways, with the following axes:
+
+- Logical Operation: find, split, replace, (match at start)
+- Kind of pattern: CharacterSet, String, Regex, Closure
+- Pattern modifier, e.g. case/diacritic sensitivity, locale.  Sometimes part of
+  the method name, and sometimes an option
+
+Represent these aspects as orthogonal, composable components.  This reduces API
+surface area massively.
+
+```swift
+s[firstMatchOf: someRegex.caseInsensitive] = myStr[]
+s.split(separatedBy: someOtherPattern)
+```
+  
 ### Index Translation is a Fact of Life
 
 There are two aspects to this problem:
@@ -163,6 +229,10 @@ There are two aspects to this problem:
   2. Many APIs in the core libraries and other frameworks still expose `String`
     positions as `Int`s and regions as `NSRange`s, which can only reference its
     `utf16` view and interoperate poorly with `String` itself.
+    
+Having `Substring` be the element of a `String` collection combines well with
+having a common index across all of the views, as this allows easy traversal
+into the interior of single characters.
 
 ### Regular Expressions Should Have Compile-Time Support
 
@@ -173,7 +243,13 @@ and library- level solutions to this problem, and while addressing it is out of
 scope for Swift 4, it is important that we lay the foundations necessary to
 support it.
 
-### Printf-Style Formatting is Cryptic, Not Extensible, Not Statically Typesafe
+### Formatting Stinky
+
+We have too many different ways to approach string formatting.  Swift string
+interpolation is wonderful (though not without weaknesses, see
+below) and universally loved.
+
+#### Printf-Style Formatting is Cryptic, Not Extensible, Not Statically Typesafe
 
 `String.format` is designed on the `printf` model: it takes a format string with
 textual placeholders for substitution, and an arbitrary list of other arguments.
@@ -189,7 +265,7 @@ the cases where the format string is a literal. Second, there's no reasonable
 way to extend the formatting vocabulary to cover the needs of new types: you are
 stuck with what's in the box.
 
-### Foundation Formatters Unweildy, Verbose
+#### Foundation Formatters Unweildy, Verbose
 
 The design pattern used by the core Foundation formatters demands more from
 users than it should:
@@ -205,7 +281,7 @@ These may seem like small issues, but the experience of Apple localization
 experts is that the total drag of these factors on programmers is such that they
 tend to reach for `String.format` instead.
 
-### String Interpolation APIs are Too Limited
+#### String Interpolation APIs are Too Limited
 
 Swift string interpolation provides a beautiful alternative to printf's cryptic
 domain-specific language (just write ordinary swift code!) and its type safety
@@ -216,6 +292,20 @@ it from being useful for localized formatting (among other jobs).
     types used in string interpolation.
   * [SR-1260](https://bugs.swift.org/browse/SR-1260) String interpolation can't
     distinguish (fragments of) the base string from the string substitutions.
+
+#### Prescriptions
+
+We should do what's needed to make Swift string interpolation the core of every
+formatting job.  Mostly this centers around fixing the interpolation protocols
+per the previous item, and supporting localization.
+
+To be able to use formatting inside interpolations, it needs to be lightweight.
+
+```swift
+"Column 1: \(n.format(radix:16, width:8) *** \(message)"
+
+"Something with leading zeroes: \(x.format(fill:zero, width:8))"
+```
 
 ### C String Interop is Patchy
 
@@ -246,8 +336,6 @@ static func decodeCString<Encoding : UnicodeCodec>(
 Because `UTF8.CodeUnit` is unsigned but `CChar`/`Int8` is signed, there is an
 impedance mismatch.  We've been inconsistent about trying to resolve that
 mismatch, and we need a policy.
-
-* FIXME: I feel like there must be other problems that I'm forgetting.  Is that all?
 
 ### Correct Internationalization is Too Hard
 
@@ -307,6 +395,27 @@ Slicing a `String` produces a new `String` that keeps the entire original
 alive. This arrangement has proven to be problematic in other programming
 languages, because applications sometimes extract small strings from large ones
 and keep those small strings long-term.
+
+The same problem occurs with `Array`, and for this reason we have an
+`ArraySlice`. We should apply this same approach for `String`s.
+
+Other languages (Java, C#) have solved this problem by making slicing a copying
+operation. But this is partly driven by their choice to make their string types
+immutable, lack of reference counting, use of integers for string indexing
+(which is not Unicode-correct) and encourages trafficking in ranges instead of
+in substrings for performance reasons.
+
+Having a separate `String` type will help people to avoid unintentionaly keeping
+parent strings alive when their substrings are stored.
+
+The tradeoff is the inconvenience of having a `Substring` when you need a
+`String`, and vice-versa. There are three options here:
+
+ - Explicit conversion: `myFun(String(someSubstr))`
+ - Implicit conversion: have the compiler do that for you
+ - Generics: write the function `myFun<S: StringProtocol>(_ arg: S)`
+ 
+ We like `someString[]` as shorthand for conversion from `String` to `Substring`.
 
 ### String's Representation Doesn't Use Storage Well
 
