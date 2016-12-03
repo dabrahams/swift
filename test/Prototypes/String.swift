@@ -38,12 +38,6 @@ case emptyInput
   }
 }
 
-protocol EncodedScalarProtocol : RandomAccessCollection {
-  var utf8: UTF8.EncodedScalar { get }
-  var utf16: UTF16.EncodedScalar { get }
-  var utf32: UTF32.EncodedScalar { get }
-}
-
 extension UTF8 {
   /// Returns `true` iff [`c0`, `c1`] is a prefix of a valid 3-byte sequence
   static func isValid3BytePrefix(_ c0: CodeUnit, _ c1: CodeUnit) -> Bool {
@@ -247,7 +241,7 @@ extension UTF8 {
     }
     return .error(resumptionPoint: j0)
   }
-  
+
   /// Parse a whole collection efficiently, using `parse` to read each unicode
   /// scalar value, writing results into `output`.
   ///
@@ -374,6 +368,7 @@ extension UTF8 {
 extension UTF16 {
   /// Returns the decoded scalar value of a valid surrogate pair
   static func decodeValid(_ unit0: CodeUnit, _ unit1: CodeUnit) -> UInt32 {
+    // [1101 10xx xxxx xxxx] [1101 11xx xxxx xxxx]
     return 0x10000 + ((UInt32(unit0 & 0x03ff) << 10) | UInt32(unit1 & 0x03ff))
   }
   
@@ -461,6 +456,26 @@ extension UTF16 {
     return .error(resumptionPoint: i1)
   }
 }
+/// A collection that has an underlying collection of code units and an
+/// encoding.  Strings will conform to this protocol so that pattern matching
+/// and other facilities can probe for information that will allow them to do
+/// their work more efficiently.  For example, a pattern that's represented as
+/// UTF8 might probe the string being searched to see if it has a compatible
+/// representation, in which case we might be able to bypass transcoding.
+///
+/// To operate on ordinary collections, a wrapper with Encoding == Void and
+/// CodeUnits == EmptyCollection<Void> can be used.
+protocol EncodedCollection : Collection {
+  associatedtype Encoding
+  associatedtype CodeUnits : Collection
+  var codeUnits : CodeUnits { get }
+}
+
+protocol EncodedScalarProtocol : RandomAccessCollection {
+  var utf8: UTF8.EncodedScalar { get }
+  var utf16: UTF16.EncodedScalar { get }
+  var utf32: UTF32.EncodedScalar { get }
+}
 
 extension UTF8 {
   static func _leading1s(_ x:UInt8) -> UInt8 {
@@ -517,7 +532,16 @@ extension UTF8 {
 //  U+0800...U+FFFF:             1110_wwww 10_xxxxxx 10_yyyyyy
 //                                         wwww_xxxx_xx_yyyyyy
 // U+10000...U+10FFFF: 11110_www 10_xxxxxX 10_yyyyyy 10_zzzzzz
-//                                 wwww_xxxx_xx_yy yyyy_zzzzzz
+//                     wwww_xxxx_xx_yyyyyy
+
+// UTF16
+// =====
+//
+// U+0000...U+FFFF        xxxxxxxx_xxxxxxxx
+// U+10000...U+10FFFF     xxxxxxxx_xxxxxxxx
+
+
+
 extension UTF8.EncodedScalar : EncodedScalarProtocol {
   var utf8: UTF8.EncodedScalar { return self }
   var utf16: UTF16.EncodedScalar {
@@ -997,22 +1021,6 @@ extension ${Self} : UnsignedInteger {
 
 typealias UIntWordBitsMinus4 = UInt${WORD_BITS - 4}
 
-/// A collection that has an underlying collection of code units and an
-/// encoding.  Strings will conform to this protocol so that pattern matching
-/// and other facilities can probe for information that will allow them to do
-/// their work more efficiently.  For example, a pattern that's represented as
-/// UTF8 might probe the string being searched to see if it has a compatible
-/// representation, in which case we might be able to bypass transcoding.
-///
-/// To operate on ordinary collections, a wrapper with Encoding == Void and
-/// CodeUnits == EmptyCollection<Void> can be used.
-protocol EncodedCollection : Collection {
-  associatedtype Encoding
-  associatedtype CodeUnits : Collection
-  var codeUnits : CodeUnits { get }
-}
-
-/// Unicode is a bidirectional EncodedCollection of UnicodeScalars
 protocol Unicode : EncodedCollection, BidirectionalCollection {
   associatedtype CodeUnits : BidirectionalCollection
   associatedtype Encoding : UnicodeCodec
@@ -1021,13 +1029,21 @@ protocol Unicode : EncodedCollection, BidirectionalCollection {
   associatedtype UTF8Units : EncodedCollection
 }
 
-/// Strings are `BidirectionalCollection`s of `Character` having whose `Index` type is
+/*
+/// Strings are `BidirectionalCollection`s of `Character` whose `Index` type is
 /// `StringIndex`
-protocol StringProtocol : BidirectionalCollection {
+protocol StringProtocol
+  : EncodedCollection, BidirectionalCollection {
   associatedtype CodeUnits : BidirectionalCollection
   associatedtype Encoding : UnicodeCodec
-}
 
+  // This wouldn't be here; it's really a trick to (weakly) simulate
+  // the ability to constrain our Index type to be String.Index and
+  // our element to be Character.
+  associatedtype Index = StringIndex
+  subscript(_: StringIndex) -> Character { get }
+}
+*/
 
 /// Storage for string representations.
 ///
@@ -1297,5 +1313,4 @@ struct SubString {
 let _=print(StringBuffer.create(minimumCapacity: 20))
 let _=print(MemoryLayout<String>.size, MemoryLayout<String>.stride)
 let _=print(MemoryLayout<SubString>.size, MemoryLayout<SubString>.stride)
-
 */
