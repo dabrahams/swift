@@ -1,6 +1,8 @@
 // RUN: rm -rf %t && mkdir -p %t && %gyb -DWORD_BITS=%target-ptrsize %s -o %t/out.swift
 // RUN: %line-directive %t/out.swift -- %target-build-swift -parse-stdlib -Xfrontend -disable-access-control %t/out.swift -o %t/a.out -Onone
 // RUN: %line-directive %t/out.swift -- %target-run %t/a.out
+// REQUIRES: executable_test
+
 import Swift
 
 
@@ -10,21 +12,38 @@ import Swift
 }%
 
 
+/// The result of transcoding from a collection using a “pull-style” API.
+///
+/// - Associated value fields:
+///  - `output` is the result of error-free transcoding
+///  - `resumptionPoint` indicates a position in the input from which to continue
+///    transcoding.
+///
+/// - Parameter T: the result of a successful parse
+/// - Parameter Index: the index type of the collection being transcoded.
 enum ParseResult<T, Index> {
 case valid(T, resumptionPoint: Index)
 case error(resumptionPoint: Index)
 case emptyInput
+  var resumptionPoint: Index? {
+    switch self {
+    case .valid(_,let r): return r
+    case .error(let r): return r
+    case .emptyInput: return nil
+    }
+  }
+  var valid : T? {
+    if case .valid(let r,_) = self { return r }
+    return nil
+  }
 }
 
-//===--- Bidirectional UTF-8 Decoding -------------------------------------===//
-// See https://gist.github.com/dabrahams/1880044370a192ae51c263a93f25a4c5 for
-// tests that show these decoders are correct.
-//
-// To optimize continuous parsing:
-// * Add a flag that says "don't check for the end"
-// * Unroll count/4 invocations, passing the flag
-// * Repeat until count < 4
-//
+protocol EncodedScalarProtocol : RandomAccessCollection {
+  var utf8: UTF8.EncodedScalar { get }
+  var utf16: UTF16.EncodedScalar { get }
+  var utf32: UTF32.EncodedScalar { get }
+}
+
 extension UTF8 {
   /// Returns `true` iff [`c0`, `c1`] is a prefix of a valid 3-byte sequence
   static func isValid3BytePrefix(_ c0: CodeUnit, _ c1: CodeUnit) -> Bool {
@@ -44,44 +63,57 @@ extension UTF8 {
     return isValid3BytePrefix(c0, c1) || isValid4BytePrefix(c0, c1)
   }
 
-  static func leading1s(_ x:UInt8) -> UInt8 {
-    return UInt8(_leadingZeros((~x)._value))
+  /// Given a valid leading byte of a multibyte sequence, strip the leading 1
+  /// bits.
+  ///
+  /// - Note: Given any other byte, the result is unspecified.
+  static func maskLeadByte(_ x: UInt8) -> UInt8 {
+    return x & (0b11111 >> (x >> 5 & 1))
   }
-
-  static func maskLeading1s(_ x: UInt8) -> UInt8 {
-    return x & ((1 << (7 &- leading1s(x))) - 1)
-  }
-
+  
   /// Parses one scalar forward from `input`.
+  ///
+  ///   - Parameter knownCountExceeds3: true if and only if the input is known
+  ///   be at least 4 elements long.  If so, we can skip end checks.  Note: pass
+  ///   a compile-time constant here or you will just slow the algorithm down!
   static func parse1Forward<C: Collection>(
-    _ input: C
-  ) -> ParseResult<UInt32, C.Index> where C.Iterator.Element == UTF8.CodeUnit {
+    _ input: C, knownCountExceeds3: Bool = false
+  ) -> ParseResult<EncodedScalar, C.Index>
+  where C.Iterator.Element == UTF8.CodeUnit {
 
+    // See
+    // https://gist.github.com/dabrahams/1880044370a192ae51c263a93f25a4c5#gistcomment-1931947
+    // for an explanation of this state machine.
     if input.isEmpty { return .emptyInput }
 
     var i = input.startIndex 
+    let end = input.endIndex
+    @inline(__always) func inputConsumed() -> Bool {
+      return _slowPath(!knownCountExceeds3 && i == end)
+    }
+    
     let u0 = input[i]
     var j = input.index(after: i)
     
     if _fastPath(Int8(bitPattern: u0) >= 0) {
-      return .valid(UInt32(u0), resumptionPoint: j)
+      return .valid(EncodedScalar(u0), resumptionPoint: j)
     }
     i = j // even if there are errors, we eat 1 byte
 
     // Begin accumulating result
-    var r = UInt32(maskLeading1s(u0))
-
-    let end = input.endIndex
+    var r = UInt32(u0)
+    var shift: UInt32 = 0
     
     // Mark one more token recognized and get the next lookahead token iff it
     // falls within pattern
     @inline (__always)
     func nextContinuation(_ pattern: ClosedRange<UInt8>) -> Bool {
       i = j
-      if _slowPath(j == end) { return false } // no more tokens
+      if inputConsumed() { return false } // no more tokens
       let u = input[j]
       if _fastPath(pattern ~= u) {
-        r = r << 6 | UInt32(u & 0b00_111111)
+        shift += 8
+        r |= UInt32(u) << shift
         j = input.index(after: j)
         return true
       }
@@ -89,13 +121,14 @@ extension UTF8 {
     }
     
     @inline(__always)
-    func state7() -> ParseResult<UInt32, C.Index> {
+    func state7() -> ParseResult<EncodedScalar, C.Index> {
       return nextContinuation(0x80...0xbf)
-        ? .valid(r, resumptionPoint: j) : .error(resumptionPoint: i)
+      ? .valid(EncodedScalar(_bits: r), resumptionPoint: j)
+      : .error(resumptionPoint: i)
     }
     
     @inline(__always)
-    func state3() -> ParseResult<UInt32, C.Index> {
+    func state3() -> ParseResult<EncodedScalar, C.Index> {
       return nextContinuation(0x80...0xbf)
         ? state7() : .error(resumptionPoint: i)
     }
@@ -124,31 +157,39 @@ extension UTF8 {
     else if u0 == 0xf4 {
       if nextContinuation(0x80...0x8f) { return state3() }
     }
+    
     return .error(resumptionPoint: i)
   }
 
   /// Parses one scalar in reverse from `input`.
+  /// 
+  ///   - Parameter knownCountExceeds3: true if and only if the input is known
+  ///   be at least 4 elements long.  If so, we can skip end checks.  Note: pass
+  ///   a compile-time constant here or you will just slow the algorithm down!
   static func parse1Reverse<C: BidirectionalCollection>(
-    _ input: C
-  ) -> ParseResult<UInt32, C.Index>
+    _ input: C, knownCountExceeds3: Bool = false
+  ) -> ParseResult<EncodedScalar, C.Index>
   where C.Iterator.Element == UTF8.CodeUnit,
   // FIXME: drop these constraints once we have the compiler features.
   C.SubSequence.Index == C.Index,
-  C.SubSequence.Iterator.Element == C.Iterator.Element {
+  C.SubSequence.Iterator.Element == C.Iterator.Element
+  {
+    // See
+    // https://gist.github.com/dabrahams/1880044370a192ae51c263a93f25a4c5#gistcomment-1931947
+    // for an explanation of this state machine.
 
-    if input.isEmpty { return .emptyInput }
+    if _slowPath(!knownCountExceeds3 && input.isEmpty) { return .emptyInput }
 
     var i = input.index(before: input.endIndex)
     var j = i
     let j0 = j
     var u = input[j]
     if _fastPath(Int8(bitPattern: u) >= 0) {
-      return .valid(UInt32(u), resumptionPoint: j)
+      return .valid(EncodedScalar(u), resumptionPoint: j)
     }
     
     let start = input.startIndex
-    var r: UInt32 = 0
-    var shift: UInt32 = 0
+    var r = UInt32(u)
 
     // Mark one more token recognized and get the next lookahead token iff it
     // satisfies the predicate
@@ -156,30 +197,31 @@ extension UTF8 {
     func consumeContinuation(_ pattern: ClosedRange<UInt8>) -> Bool {
       guard _fastPath(pattern ~= u) else { return false }
       i = j
-      guard j != start else { return false }
-      r |= UInt32(u & 0b00_111111) << shift
-      shift += 6
+      guard _fastPath(knownCountExceeds3 || j != start) else { return false }
+      r <<= 8
+      r |= UInt32(u)
       j = input.index(before: j)
       u = input[j]
       return true
     }
 
     @inline(__always)
-    func accept(_ pat: ClosedRange<UInt8>) -> ParseResult<UInt32, C.Index>? {
+    func accept(_ pat: ClosedRange<UInt8>) -> ParseResult<EncodedScalar, C.Index>? {
       if _fastPath(pat.contains(u)) {
-        r |= UInt32(maskLeading1s(u)) << shift
-        return .valid(r, resumptionPoint: j)
+        r <<= 8
+        r |= UInt32(u)
+        return .valid(EncodedScalar(_bits: r), resumptionPoint: j)
       }
       return nil
     }
     
     @inline(__always)
-    func state4_5() -> ParseResult<UInt32, C.Index> {
+    func state4_5() -> ParseResult<EncodedScalar, C.Index> {
       return accept(0xf0...0xf3) ?? .error(resumptionPoint: j0)
     }
     
     @inline(__always)
-    func state5_6() -> ParseResult<UInt32, C.Index> {
+    func state5_6() -> ParseResult<EncodedScalar, C.Index> {
       return accept(0xf1...0xf4) ?? .error(resumptionPoint: j0)
     }
 
@@ -205,21 +247,591 @@ extension UTF8 {
     }
     return .error(resumptionPoint: j0)
   }
+  
+  /// Parse a whole collection efficiently, using `parse` to read each unicode
+  /// scalar value, writing results into `output`.
+  ///
+  /// - Returns: a pair consisting of:
+  ///   0. the suffix of input starting with the first decoding error if
+  ///      `stopOnError` is true, and the empty suffix otherwise.
+  ///   1. The number of errors that were detected.  If `stopOnError` is true
+  ///      this value will never exceed 1.
+  ///
+  /// - Note: using this function may be faster than repeatedly using `parse`
+  ///   directly, because it avoids intra-scalar checks for end of sequence.
+  @discardableResult
+  static func parseForward<C: Collection>(
+    _ input: C,
+    using parse: (C.SubSequence, Bool)->ParseResult<EncodedScalar, C.SubSequence.Index>,
+    stoppingOnError stopOnError: Bool = false,
+    into output: (ParseResult<EncodedScalar, C.SubSequence.Index>)->Void
+  ) -> (remainder: C.SubSequence, errorCount: Int)
+  where C.SubSequence : Collection, C.SubSequence.SubSequence == C.SubSequence,
+    C.SubSequence.Iterator.Element == CodeUnit {
+    var remainder = input[input.startIndex..<input.endIndex]
+    var errorCount = 0
+    
+    func eat(_ o: ParseResult<EncodedScalar, C.SubSequence.Index>)
+      -> ParseResult<EncodedScalar, C.SubSequence.Index>? {
+      switch o {
+      case .emptyInput:
+        // Should we make this case unreachable for the first loop below, or is
+        // the compiler smart enough to avoid introducing overhead?
+        return nil 
+      case .valid(_, _): break
+      case .error(_): errorCount += 1
+        if stopOnError { return nil }
+      }
+      remainder = remainder.suffix(from: o.resumptionPoint!)
+      return o
+    }
+
+    // Repeatedly eat the first 25% without checking for end-of-input.
+    while remainder.count >= 4 {
+      // This loop could be unrolled, obviously
+      for _ in 0 ..< numericCast(remainder.count) >> 2 {
+        guard let o = eat(parse(remainder, true)) else {
+          return (remainder, errorCount)
+        }
+        output(o)
+      }
+    }
+
+    // Handle whatever is left
+    while true {
+      guard let o = eat(parse(remainder, false)) else {
+        return (remainder, errorCount)
+      }
+      output(o)
+    }
+  }
+
+  /// Parse a whole collection efficiently in reverse, using `parse`
+  /// to read each unicode scalar value, writing results into
+  /// `output`.
+  ///
+  /// - Returns: a pair consisting of:
+  ///   0. the suffix of input starting with the first decoding error if
+  ///      `stopOnError` is true, and the empty suffix otherwise.
+  ///   1. The number of errors that were detected.  If `stopOnError` is true
+  ///      this value will never exceed 1.
+  ///
+  /// - Note: using this function may be faster than repeatedly using `parse`
+  ///   directly, because it avoids intra-scalar checks for end of sequence.
+  @discardableResult
+  static func parseReverse<C: BidirectionalCollection>(
+    _ input: C,
+    using parse: (C.SubSequence, Bool)->ParseResult<EncodedScalar, C.SubSequence.Index>,
+    stoppingOnError stopOnError: Bool = false,
+    into output: (ParseResult<EncodedScalar, C.SubSequence.Index>)->Void
+  ) -> (remainder: C.SubSequence, errorCount: Int)
+  where C.SubSequence : BidirectionalCollection,
+        C.SubSequence.SubSequence == C.SubSequence,
+        C.SubSequence.Iterator.Element == CodeUnit {
+    var remainder = input[input.startIndex..<input.endIndex]
+    var errorCount = 0
+    
+    func eat(_ o: ParseResult<EncodedScalar, C.SubSequence.Index>)
+      -> ParseResult<EncodedScalar, C.SubSequence.Index>? {
+      switch o {
+      case .emptyInput:
+        // Should we make this case unreachable for the first loop below, or is
+        // the compiler smart enough to avoid introducing overhead?
+        return nil 
+      case .valid(_, _): break
+      case .error(_): errorCount += 1
+        if stopOnError { return nil }
+      }
+      remainder = remainder.prefix(upTo: o.resumptionPoint!)
+      return o
+    }
+
+    // Repeatedly eat the last 25% without checking for end-of-input.
+    while remainder.count >= 4 {
+      // This loop could be unrolled, obviously
+      for _ in 0 ..< numericCast(remainder.count) >> 2 {
+        guard let o = eat(parse(remainder, true)) else {
+          return (remainder, errorCount)
+        }
+        output(o)
+      }
+    }
+
+    // Handle whatever is left
+    while true {
+      guard let o = eat(parse(remainder, false)) else {
+        return (remainder, errorCount)
+      }
+      output(o)
+    }
+  }
+  // FIXME: without inducing a speed penalty, can we collapse the logic for
+  // parseReverse and parseForward by using a reverse collection view and
+  // changing the logic for the low level parsing routine to use forward
+  // traversal?  Run the experiment.
 }
 
-/// A collection that has an underlying collection of code units and an
-/// encoding.  Strings will conform to this protocol so that pattern matching
-/// and other facilities can probe for information that will allow them to do
-/// their work more efficiently.  For example, a pattern that's represented as
-/// UTF8 might probe the string being searched to see if it has a compatible
-/// representation, in which case we might be able to bypass transcoding.
-///
-/// To operate on ordinary collections, a wrapper with Encoding == Void and
-/// CodeUnits == EmptyCollection<Void> can be used.
-protocol EncodedCollection : Collection {
-  associatedtype Encoding
-  associatedtype CodeUnits : Collection
-  var codeUnits : CodeUnits { get }
+extension UTF16 {
+  /// Returns the decoded scalar value of a valid surrogate pair
+  static func decodeValid(_ unit0: CodeUnit, _ unit1: CodeUnit) -> UInt32 {
+    return 0x10000 + ((UInt32(unit0 & 0x03ff) << 10) | UInt32(unit1 & 0x03ff))
+  }
+  
+  /// Parses one scalar forward from `input`.
+  ///
+  ///   - Parameter knownCountExceeds1: true if and only if the input is known
+  ///   be at least 2 elements long.  If so, we can skip end checks.  Note: pass
+  ///   a compile-time constant here or you will just slow the algorithm down!
+  static func parse1Forward<C: Collection>(
+    _ input: C, knownCountExceeds1: Bool = false
+  ) -> ParseResult<EncodedScalar, C.Index>
+  where C.Iterator.Element == CodeUnit {
+
+    if _slowPath(!knownCountExceeds1 && input.isEmpty) {
+      return .emptyInput
+    }
+    let i0 = input.startIndex
+    let unit0 = input[i0]
+    let end = input.endIndex
+    let i1 = input.index(after: i0)
+    
+    // A well-formed pair of surrogates looks like this:
+    //     high-surrogate        low-surrogate
+    // [1101 10xx xxxx xxxx] [1101 11xx xxxx xxxx]
+
+    // Common case first, non-surrogate -- just a sequence of 1 code unit.
+    if _fastPath((unit0 >> 11) != 0b1101_1) {
+      return .valid(EncodedScalar(unit0), resumptionPoint: i1)
+    }
+
+    // Ensure `unit0` is a high-surrogate and there's another byte which is a
+    // low-surrogate
+    if _fastPath(
+      (unit0 >> 10) == 0b1101_10 && knownCountExceeds1 || i1 != end),
+      let unit1 = Optional(input[i1]),
+      _fastPath((unit1 >> 10) == 0b1101_11) {
+      return .valid(
+        EncodedScalar(unit0, unit1),
+        resumptionPoint: input.index(after: i1)
+      )
+    }
+    return .error(resumptionPoint: i1)
+  }
+
+  /// Parses one scalar in reverse from `input`.
+  /// 
+  ///   - Parameter knownCountExceeds1: true if and only if the input is known
+  ///   be at least 2 elements long.  If so, we can skip end checks.  Note: pass
+  ///   a compile-time constant here or you will just slow the algorithm down!
+  static func parse1Reverse<C: BidirectionalCollection>(
+    _ input: C, knownCountExceeds1: Bool = false
+  ) -> ParseResult<EncodedScalar, C.Index>
+  where C.Iterator.Element == CodeUnit,
+  // FIXME: drop these constraints once we have the compiler features.
+  C.SubSequence.Index == C.Index,
+  C.SubSequence.Iterator.Element == C.Iterator.Element
+  {
+    if _slowPath(!knownCountExceeds1 && input.isEmpty) { return .emptyInput }
+
+    let i1 = input.index(before: input.endIndex)
+    let unit1 = input[i1]
+    
+    // A well-formed pair of surrogates looks like this:
+    //     high-surrogate        low-surrogate
+    // [1101 10xx xxxx xxxx] [1101 11xx xxxx xxxx]
+
+    // Common case first, non-surrogate -- just a sequence of 1 code unit.
+    if _fastPath((unit1 >> 11) != 0b1101_1) {
+      return .valid(EncodedScalar(unit1), resumptionPoint: i1)
+    }
+    let start = input.startIndex
+
+    // Ensure `unit1` is a low-surrogate and there's another byte which is a
+    // high-surrogate
+    if _fastPath(
+      (unit1 >> 10) == 0b1101_11 && knownCountExceeds1 || i1 != start),
+      let i0 = Optional(input.index(before: i1)),
+      let unit0 = Optional(input[i0]),
+      _fastPath((unit0 >> 10) == 0b1101_10) {
+      return .valid(
+        EncodedScalar(unit0, unit1),        
+        resumptionPoint: i0
+      )
+    }
+    return .error(resumptionPoint: i1)
+  }
+}
+
+extension UTF8 {
+  static func _leading1s(_ x:UInt8) -> UInt8 {
+    return UInt8(_leadingZeros((~x)._value))
+  }
+  
+  struct EncodedScalar : RandomAccessCollection {
+    let _bits: UInt32
+    var startIndex: UInt8 { return 0 }
+    
+    var endIndex: UInt8 {
+      let lowByte = UInt8(truncatingBitPattern: _bits)
+      let lead1s = UInt64(_leading1s(lowByte))
+      return UInt8(
+        truncatingBitPattern: 0x040302FF01 >> (lead1s << 3))
+    }
+    
+    init(_ _0: CodeUnit) {
+      _bits = UInt32(_0)
+    }
+    
+    init(_ _0: CodeUnit, _ _1: CodeUnit) {
+      _bits = UInt32(_1) << 8 | UInt32(_0)
+    }
+    
+    init(_ _0: CodeUnit, _ _1: CodeUnit, _ _2: CodeUnit) {
+      _bits = (UInt32(_2) << 8 | UInt32(_1)) << 8 | UInt32(_0)
+    }
+    
+    init(_ _0: CodeUnit, _ _1: CodeUnit, _ _2: CodeUnit, _ _3: CodeUnit) {
+      _bits = ((UInt32(_3) << 8 | UInt32(_2)) << 8 | UInt32(_1)) << 8
+        | UInt32(_0)
+    }
+    
+    init(_bits: UInt32) {
+      self._bits = _bits
+    }
+    
+    typealias Index = UInt8
+    subscript(i: Index) -> UInt8 {
+      return UInt8(
+        truncatingBitPattern: _bits >> (UInt32(i & (32 - 1)) << 3))
+    }
+  }
+}
+
+// UTF8 <-> UTF16
+// ==============
+//
+//  U+0000...U+007F                                  0_xxxxxxx
+//                                          00000000_0_xxxxxxx
+//  U+0080...U+07FF                        110_wwwww 10_xxxxxx
+//                                         00000_www_ww_xxxxxx
+//  U+0800...U+FFFF:             1110_wwww 10_xxxxxx 10_yyyyyy
+//                                         wwww_xxxx_xx_yyyyyy
+// U+10000...U+10FFFF: 11110_www 10_xxxxxX 10_yyyyyy 10_zzzzzz
+//                                 wwww_xxxx_xx_yy yyyy_zzzzzz
+extension UTF8.EncodedScalar : EncodedScalarProtocol {
+  var utf8: UTF8.EncodedScalar { return self }
+  var utf16: UTF16.EncodedScalar {
+    return utf32.utf16
+  }
+  var utf32: UTF32.EncodedScalar {
+    if _fastPath(_bits <= 0x7f) {
+      return UTF32.EncodedScalar(_bits: _bits)
+    }
+    var r = UInt32(UTF8.maskLeadByte(UInt8(truncatingBitPattern: _bits)))
+    for b in self[1..<endIndex] {
+      r <<= 6
+      r |= UInt32(b)
+    }
+    return UTF32.EncodedScalar(_bits: r)
+  }
+}
+
+extension UTF16 {
+  struct EncodedScalar : RandomAccessCollection {
+    let _bits: UInt32
+    var startIndex: UInt8 { return 0 }
+    
+    var endIndex: UInt8 {
+      return UInt8(truncatingBitPattern: self[1] >> 15) + 1
+    }
+    
+    init(_ _0: CodeUnit) {
+      _bits = UInt32(_0)
+    }
+    
+    init(_ _0: CodeUnit, _ _1: CodeUnit) {
+      _bits = UInt32(_1) << 16 | UInt32(_0)
+    }
+    
+    init(_bits: UInt32) {
+      self._bits = _bits
+    }
+    
+    typealias Index = UInt8
+    subscript(i: Index) -> UInt16 {
+      return UInt16(
+        truncatingBitPattern: _bits >> UInt32((i & 1) << 4))
+    }
+  }
+}
+
+extension UTF16.EncodedScalar : EncodedScalarProtocol {
+  var utf8: UTF8.EncodedScalar {
+    return utf32.utf8
+  }
+  var utf16: UTF16.EncodedScalar {
+    return self
+  }
+  var utf32: UTF32.EncodedScalar {
+    if _fastPath(_bits >> 16 == 0) {
+      return UTF32.EncodedScalar(_bits)
+    }
+    let h = UInt32(self[0] &- 0xD800)
+    let l = UInt32(self[1] &- 0xDC00) & (1 << 10 - 1)
+    return UTF32.EncodedScalar(h << 10 + l + 0x10000)
+  }
+}
+
+extension UTF32 {
+  struct EncodedScalar : RandomAccessCollection {
+    typealias Index = UInt8
+    var startIndex: UInt8 { return 0 }
+    var endIndex: UInt8 { return 1 }
+    let _bits: UInt32
+    init(_ _0: CodeUnit) {
+      _bits = _0
+    }
+    init(_bits: UInt32) {
+      self._bits = _bits
+    }
+    subscript(i: Index) -> UInt32 {
+      return _bits
+    }
+  }
+}
+
+extension UTF32.EncodedScalar : EncodedScalarProtocol {
+  var utf8: UTF8.EncodedScalar {
+    if _fastPath(_bits <= 0x7f) { return UTF8.EncodedScalar(_bits: _bits) }
+    if _fastPath(_bits <= 0x7ff) {
+      return UTF8.EncodedScalar(
+        0b110_00000 | UInt8(truncatingBitPattern: _bits >> 6),
+        0b10_000000 | UInt8(truncatingBitPattern: _bits) & 0b00_111111
+      )
+    }
+    if _fastPath(_bits >> 16 == 0) {
+      return UTF8.EncodedScalar(
+        0b1110_0000 | UInt8(truncatingBitPattern: _bits >> 12),
+        0b10_000000 | UInt8(truncatingBitPattern: _bits >> 6) & 0b00_111111,
+        0b10_000000 | UInt8(truncatingBitPattern: _bits) & 0b00_111111
+      )
+    }
+    return UTF8.EncodedScalar(
+      0b11110_000 | UInt8(truncatingBitPattern: _bits >> 18),
+      0b10_000000 | UInt8(truncatingBitPattern: _bits >> 12) & 0b00_111111,
+      0b10_000000 | UInt8(truncatingBitPattern: _bits >> 6) & 0b00_111111,
+      0b10_000000 | UInt8(truncatingBitPattern: _bits) & 0b00_111111
+    )
+  }
+  var utf16: UTF16.EncodedScalar {
+    if _fastPath(_bits >> 16 == 0) {
+      return UTF16.EncodedScalar(_bits: _bits)
+    }
+    let hl = _bits - 0x10000
+    return UTF16.EncodedScalar(
+      UInt16(truncatingBitPattern: hl >> 10 + 0xD800),
+      UInt16(truncatingBitPattern: hl & (1 << 10 - 1) + 0xDC00)
+    )
+  }
+  var utf32: UTF32.EncodedScalar {
+    return self
+  }
+}
+
+protocol UnicodeIndexBuffer : RandomAccessCollection {
+  var utf8: UTF8.EncodedScalar { get }
+  var utf16: UTF16.EncodedScalar { get }
+  var utf32: UTF32.EncodedScalar { get }
+  
+  init(_ _0: UTF8.CodeUnit)
+  init(_ _0: UTF8.CodeUnit, _ _1: UTF8.CodeUnit)
+  init(_ _0: UTF8.CodeUnit, _ _1: UTF8.CodeUnit, _ _2: UTF8.CodeUnit)
+  init(_ _0: UTF8.CodeUnit, _ _1: UTF8.CodeUnit,
+    _ _2: UTF8.CodeUnit, _ _3: UTF8.CodeUnit)
+  init(_ _0: UTF16.CodeUnit)
+  init(_ _0: UTF16.CodeUnit, _ _1: UTF16.CodeUnit)
+  init(_ _0: UTF32.CodeUnit)
+  func isCompatible(with other: Self) -> Bool
+  subscript(i: Index) -> UInt32 { get }
+}
+
+struct UnicodeIndexBuffer0 : UnicodeIndexBuffer {
+  typealias Index = UInt8
+  var startIndex: UInt8 { return 0 }
+  var endIndex: UInt8 { return UInt8(bitPattern: count) }
+  let count: Int8
+  let _shift: UInt8
+  let _bits: UInt32
+
+  var utf8: UTF8.EncodedScalar {
+    if _fastPath(_shift == 3) {
+      return UTF8.EncodedScalar(_bits: _bits)
+    }
+    else if _fastPath(_shift == 4) {
+      return utf16.utf8
+    }
+    return utf32.utf8
+  }
+  var utf16: UTF16.EncodedScalar {
+    if _fastPath(_shift == 4) {
+      return UTF16.EncodedScalar(_bits: _bits)
+    }
+    else if _fastPath(_shift == 3) {
+      return utf8.utf16
+    }
+    return utf32.utf16
+  }
+  var utf32: UTF32.EncodedScalar {
+    if _fastPath(_shift == 5) {
+      return UTF32.EncodedScalar(_bits: _bits)
+    }
+    else if _fastPath(_shift == 3) {
+      return utf8.utf32
+    }
+    return utf16.utf32
+  }
+  
+  init(utf8: ()) {
+    count = 0
+    _shift = 3
+    _bits = 0
+  }
+  init(utf16: ()) {
+    count = 0
+    _shift = 4
+    _bits = 0
+  }
+  init(utf32: ()) {
+    count = 0
+    _shift = 5
+    _bits = 0
+  }
+  init(_ _0: UTF8.CodeUnit) {
+    count = 1
+    _shift = 3
+    _bits = UInt32(_0)
+  }
+  init(_ _0: UTF8.CodeUnit, _ _1: UTF8.CodeUnit) {
+    count = 2
+    _shift = 3
+    _bits = UInt32(_1) << 8 | UInt32(_0)
+  }
+  init(_ _0: UTF8.CodeUnit, _ _1: UTF8.CodeUnit, _ _2: UTF8.CodeUnit) {
+    count = 3
+    _shift = 3
+    _bits = (UInt32(_2) << 8 | UInt32(_1)) << 8 | UInt32(_0)
+  }
+  init(_ _0: UTF8.CodeUnit, _ _1: UTF8.CodeUnit,
+    _ _2: UTF8.CodeUnit, _ _3: UTF8.CodeUnit) {
+    count = 4
+    _shift = 3
+    _bits = (
+      (UInt32(_3) << 8 | UInt32(_2)) << 8 | UInt32(_1)
+    ) << 8 | UInt32(_0)
+  }
+  init(_ _0: UTF16.CodeUnit) {
+    count = 1
+    _shift = 4
+    _bits = UInt32(_0)
+  }
+  init(_ _0: UTF16.CodeUnit, _ _1: UTF16.CodeUnit) {
+    count = 2
+    _shift = 4
+    _bits = UInt32(_1) << 16 | UInt32(_0)
+  }
+  init(_ _0: UTF32.CodeUnit) {
+    count = 1
+    _shift = 5
+    _bits = _0
+  }
+  func isCompatible(with other: UnicodeIndexBuffer0) -> Bool {
+    return self._shift == other._shift
+  }
+  subscript(i: Index) -> UInt32 {
+    return _bits >> (UInt32(i << _shift) & (32 - 1))
+    & ~0 >> (32 - UInt32(1 << _shift))
+  }
+}
+
+enum UnicodeIndexBuffer1 : UnicodeIndexBuffer {
+  typealias Index = UInt8
+case utf8(UTF8.EncodedScalar)
+case utf16(UTF16.EncodedScalar)
+case utf32(UTF32.EncodedScalar)
+  
+  var startIndex: UInt8 { return 0 }
+  var endIndex: UInt8 {
+    switch self {
+    case .utf8(let x): return x.endIndex
+    case .utf16(let x): return x.endIndex
+    case .utf32(let x): return x.endIndex
+    }
+  }
+  var count: Int {
+    switch self {
+    case .utf8(let x): return x.count
+    case .utf16(let x): return x.count
+    case .utf32(let x): return x.count
+    }
+  }
+  init(_ _0: UTF8.CodeUnit) {
+    self = .utf8(UTF8.EncodedScalar(_0))
+  }
+  init(_ _0: UTF8.CodeUnit, _ _1: UTF8.CodeUnit) {
+    self = .utf8(UTF8.EncodedScalar(_0, _1))
+  }
+  init(_ _0: UTF8.CodeUnit, _ _1: UTF8.CodeUnit, _ _2: UTF8.CodeUnit) {
+    self = .utf8(UTF8.EncodedScalar(_0, _1, _2))
+  }
+  init(_ _0: UTF8.CodeUnit, _ _1: UTF8.CodeUnit,
+    _ _2: UTF8.CodeUnit, _ _3: UTF8.CodeUnit) {
+    self = .utf8(UTF8.EncodedScalar(_0, _1, _2, _3))
+  }
+  var utf8: UTF8.EncodedScalar {
+    switch self {
+    case .utf8(let x): return x.utf8
+    case .utf16(let x): return x.utf8
+    case .utf32(let x): return x.utf8
+    }
+  }
+  var utf16: UTF16.EncodedScalar {
+    switch self {
+    case .utf8(let x): return x.utf16
+    case .utf16(let x): return x.utf16
+    case .utf32(let x): return x.utf16
+    }
+  }
+  var utf32: UTF32.EncodedScalar {
+    switch self {
+    case .utf8(let x): return x.utf32
+    case .utf16(let x): return x.utf32
+    case .utf32(let x): return x.utf32
+    }
+  }
+  init(_ _0: UTF16.CodeUnit) {
+    self = .utf16(UTF16.EncodedScalar(_0))
+  }
+  init(_ _0: UTF16.CodeUnit, _ _1: UTF16.CodeUnit) {
+    self = .utf16(UTF16.EncodedScalar(_0, _1))
+  }
+  init(_ _0: UTF32.CodeUnit) {
+    self = .utf32(UTF32.EncodedScalar(_0))
+  }
+  func isCompatible(with other: UnicodeIndexBuffer1) -> Bool {
+    switch (self, other) {
+    case (.utf8(_), .utf8(_)): return true
+    case (.utf16(_), .utf16(_)): return true
+    case (.utf32(_), .utf16(_)): return true
+    default: return false
+    }
+  }
+  subscript(i: Index) -> UInt32 {
+    switch(self) {
+    case .utf8(let x): return UInt32(x[i])
+    case .utf16(let x): return UInt32(x[i])
+    case .utf32(let x): return UInt32(x[i])
+    }
+  }
 }
 
 /// An Index type that can be used to index code units, and UTF8 and UTF16 views
@@ -230,33 +842,36 @@ protocol EncodedCollection : Collection {
 ///
 /// - Parameter Offset: an unsigned integer type that can represent at least
 ///   numbers in the range 0..<4.
-struct UnicodeIndex<Base: Comparable, Offset: UnsignedInteger> : Comparable {
-  init(base: Base, maxOffsetInTranscodedScalar: Offset) {
+struct UnicodeIndex<
+  Base: Comparable, Offset: UnsignedInteger, Buffer: UnicodeIndexBuffer
+> : Comparable {
+  init(base: Base, maxOffsetInTranscodedScalar: Offset, buffer: Buffer) {
     self.base = base
+    self.buffer = buffer
     self.offsetInTranscodedScalar = 0
     self.maxOffsetInTranscodedScalar = maxOffsetInTranscodedScalar
   }
 
-  static func <(l: UnicodeIndex, r: UnicodeIndex) -> Bool {
+  internal func _checkCompatibility(with other: UnicodeIndex) {
     _debugPrecondition(
-      l.base != r.base
-      || l.maxOffsetInTranscodedScalar == r.maxOffsetInTranscodedScalar,
+      offsetInTranscodedScalar == 0
+      || other.offsetInTranscodedScalar == 0
+      || buffer.isCompatible(with: other.buffer),
       "Can't mix indices that don't sit on unicode scalar boundaries or index the same transcoding.")
+  }
+  
+  static func <(l: UnicodeIndex, r: UnicodeIndex) -> Bool {
+    l._checkCompatibility(with: r)
     return l.base < r.base
-        || l.base == r.base
-	         && l.offsetInTranscodedScalar < r.offsetInTranscodedScalar
+      || l.base == r.base
+         && l.offsetInTranscodedScalar < r.offsetInTranscodedScalar
   }
 
   static func ==(l: UnicodeIndex, r: UnicodeIndex) -> Bool {
-    _debugPrecondition(
-      l.base != r.base
-      || l.maxOffsetInTranscodedScalar == r.maxOffsetInTranscodedScalar,
-      "Can't mix indices that don't sit on unicode scalar boundaries or index the same transcoding.")
+    l._checkCompatibility(with: r)
     return l.base == r.base
-	         && l.offsetInTranscodedScalar == r.offsetInTranscodedScalar
+      && l.offsetInTranscodedScalar == r.offsetInTranscodedScalar
   }
-
-  // FIXME: we may want to augment this with a cache of transcoded units.
 
   /// an index into underlying CodeUnits, pointing at a unicode scalar.
   var base: Base
@@ -266,72 +881,11 @@ struct UnicodeIndex<Base: Comparable, Offset: UnsignedInteger> : Comparable {
 
   /// the number of bytes in the transcoded scalar, minus 1
   var maxOffsetInTranscodedScalar: Offset
+
+  var buffer: Buffer
 }
 
-// A specialized version of UnicodeIndex that might be easier to compile, but
-// uses a fixed layout
-struct StringIndex : Comparable {
-  init(offsetOfScalar: Int, countOfTranscodedScalar: Int) {
-    let v = countOfTranscodedScalar &- 1
-    _debugPrecondition(
-      v & ~0b11 == 0, "countOfTranscodedScalar must be between 1 and 4")
-    representation = UInt(offsetOfScalar) << 4 | (UInt(bitPattern: v) << 2)
-  }
-
-  // the offset into the underlying CodeUnits, whatever those may be
-  private var representation: UInt
-
-  public var offsetOfScalar: Int {
-    get {
-      return Int(bitPattern: representation >> 4)
-    }
-    set {
-      representation = (representation & 0b1111) | numericCast(newValue) << 4
-    }
-  }
-
-  public var countOfTranscodedScalar: Int {
-    get {
-      return Int(bitPattern: (representation >> 2) & 0b11) &+ 1
-    }
-    set {
-      let v = newValue &- 1
-      _debugPrecondition(
-        v & ~0b11 == 0, "countOfTranscodedScalar must be between 1 and 4")
-      representation = (representation & ~0b1100) | UInt(bitPattern: v << 2)
-    }
-  }
-
-  public var offsetInTranscodedScalar: Int {
-    get {
-      return Int(bitPattern: representation & 0b11)
-    }
-    set {
-      _debugPrecondition(
-        newValue & ~0b11 == 0,
-        "offsetInTranscodedScalar must be between 0 and 3")
-      representation = (representation & ~0b11) | UInt(bitPattern: newValue)
-    }
-  }
-
-  static func <(l: StringIndex, r: StringIndex) -> Bool {
-    _debugPrecondition(
-      (l.representation ^ r.representation) & 0b1100 == 0
-      || (l.representation | r.representation) & 0b11 == 0,
-      "Can't mix indices that don't sit on unicode scalar boundaries or index the same transcoding.")
-    return l.representation < r.representation
-  }
-
-  static func ==(l: StringIndex, r: StringIndex) -> Bool  {
-    _debugPrecondition(
-      (l.representation ^ r.representation) & 0b1100 == 0
-      || (l.representation | r.representation) & 0b11 == 0,
-      "Can't mix indices that don't sit on unicode scalar boundaries or index the same transcoding.")
-    return l.representation == r.representation
-  }
-}
-
-% for bits in set([2, 62, 63, WORD_BITS - 4]):
+% for bits in set([2, 3, 62, 63, WORD_BITS - 4]):
 %   signed = False
 %   (sign, ext) = ('u', 'zext')
 %   Self = 'UInt%s' % bits
@@ -443,6 +997,22 @@ extension ${Self} : UnsignedInteger {
 
 typealias UIntWordBitsMinus4 = UInt${WORD_BITS - 4}
 
+/// A collection that has an underlying collection of code units and an
+/// encoding.  Strings will conform to this protocol so that pattern matching
+/// and other facilities can probe for information that will allow them to do
+/// their work more efficiently.  For example, a pattern that's represented as
+/// UTF8 might probe the string being searched to see if it has a compatible
+/// representation, in which case we might be able to bypass transcoding.
+///
+/// To operate on ordinary collections, a wrapper with Encoding == Void and
+/// CodeUnits == EmptyCollection<Void> can be used.
+protocol EncodedCollection : Collection {
+  associatedtype Encoding
+  associatedtype CodeUnits : Collection
+  var codeUnits : CodeUnits { get }
+}
+
+/// Unicode is a bidirectional EncodedCollection of UnicodeScalars
 protocol Unicode : EncodedCollection, BidirectionalCollection {
   associatedtype CodeUnits : BidirectionalCollection
   associatedtype Encoding : UnicodeCodec
@@ -451,19 +1021,13 @@ protocol Unicode : EncodedCollection, BidirectionalCollection {
   associatedtype UTF8Units : EncodedCollection
 }
 
-/// Strings are `BidirectionalCollection`s of `Character` whose `Index` type is
+/// Strings are `BidirectionalCollection`s of `Character` having whose `Index` type is
 /// `StringIndex`
-protocol StringProtocol
-  : EncodedCollection, BidirectionalCollection {
+protocol StringProtocol : BidirectionalCollection {
   associatedtype CodeUnits : BidirectionalCollection
   associatedtype Encoding : UnicodeCodec
-
-  // This wouldn't be here; it's really a trick to (weakly) simulate
-  // the ability to constrain our Index type to be String.Index and
-  // our element to be Character.
-  associatedtype Index = StringIndex
-  subscript(_: StringIndex) -> Character { get }
 }
+
 
 /// Storage for string representations.
 ///
@@ -733,4 +1297,5 @@ struct SubString {
 let _=print(StringBuffer.create(minimumCapacity: 20))
 let _=print(MemoryLayout<String>.size, MemoryLayout<String>.stride)
 let _=print(MemoryLayout<SubString>.size, MemoryLayout<SubString>.stride)
+
 */
