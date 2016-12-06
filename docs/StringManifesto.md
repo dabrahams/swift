@@ -509,7 +509,7 @@ issues:
 `init()` | ✅
 `var customMirror: Mirror` |✅
 `var customPlaygroundQuickLook: PlaygroundQuickLook` | ↗️Move CustomPlaygroundQuickLookable to PlaygroundSupport library
-`init(_: String)` | ❓Should be resolved the same way as other "copy initializers" for value types
+`init(_: String)` | ❓Should be resolved the same way as other "copy initializers" for value types, whatever that turns out to be
 `func uppercased() -> String` |✅
 `var localizedLowercase: String` |↗️ `Text`
 `func lowercased(with: Locale?) -> String` |❌subsumed into the above
@@ -522,8 +522,8 @@ issues:
 `init?(_: String)` |❓Why do we have this?
 `init?(`<br/>`  bytesNoCopy: UnsafeMutableRawPointer,`<br/>`  length: Int,`<br/>`  encoding: Encoding,`<br/>`  freeWhenDone: Bool)` |❓My main question about this API is whether it should be a top-level API on String, or whether it should be something like `String(SomeSpecificModelOfStringProtocol(...))`.
 `var hash: Int` | ❌We should kill off the incorrect `==` behavior and associated hash
-`func folding(`<br/>`  options: CompareOptions = default,`<br/>`  locale: Locale?) -> String` |❓Swiss army knife; locale parameter would drop at least
-`func applyingTransform(`<br/>`  _: StringTransform, reverse: Bool) -> String?` |❓Swiss army knife
+`func folding(`<br/>`  options: CompareOptions = default,`<br/>`  locale: Locale?) -> String` |❓Redesign this Swiss army knife; locale parameter would drop at least
+`func applyingTransform(`<br/>`  _: StringTransform, reverse: Bool) -> String?` |❓Redesign this Swiss army knife
 
 ### Outside String Domain
 
@@ -589,9 +589,9 @@ We are recommending removing this data type in favor of `String` and
 
 **API** | **Suggested Disposition**
 ---|---
-`static func <(lhs: String, rhs: String) -> Bool` |❓
+`static func <(lhs: String, rhs: String) -> Bool` |✅ Also `lhs.orderedVs(rhs)`
 `var hashValue: Int` |✅
-`func caseInsensitiveCompare(`<br/>`  _: String) -> ComparisonResult` |❓
+`func caseInsensitiveCompare(`<br/>`  _: String) -> ComparisonResult` | `lhs.orderedVs(rhs, .ignoringCase)`
 `typealias CompareOptions =` ... |❓
 `func commonPrefix(`<br/>`  with: String,`<br/>`  options: CompareOptions = default`<br/>`) -> String` | Replace with mismatch
 `func compare(`<br/>`  _: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default,`<br/>`  locale: Locale? = default`<br/>`) -> ComparisonResult` |❓
@@ -756,7 +756,22 @@ We are recommending removing this data type in favor of `String` and
 `func enumerateLinguisticTags(`<br/>`  in: Range<Index>,`<br/>`  scheme: String,`<br/>`  options: NSLinguisticTagger.Options = default,`<br/>`  orthography: NSOrthography? = default,`<br/>`  invoking: (String,`<br/>`  Range<Index>,`<br/>`  Range<Index>, inout Bool) -> ())` | ↗️Move to `NSLinguisticTagger`
 `func linguisticTags(`<br/>`  in: Range<Index>,`<br/>`  scheme: String,`<br/>`  options: NSLinguisticTagger.Options = default,`<br/>`  orthography: NSOrthography? = default,`<br/>`  tokenRanges: UnsafeMutablePointer<[Range<Index>]>? = default`<br/>`) -> [String]` |❓
 
+## Existing APIs, Annotated
 
+```swift
+struct CompareOptions : OptionSet {
+    static var 
+      caseInsensitive, 
+      literal,
+      backwards,
+      anchored,
+      numeric,
+      diacriticInsensitive,
+      widthInsensitive,
+      forcedOrdering,
+      regularExpression
+  }
+```
 
 ## Open Questions
 
