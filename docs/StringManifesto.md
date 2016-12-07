@@ -120,9 +120,11 @@ That said, `String` being a `Collection` has real benefits:
 
 Recommendation:
 
- - `String` Becomes a `Collection` again
- - The `Character` type is eliminated
- - The `Element` of `String` is `Substring`
+ - `String` Becomes a `Collection` again. More specifically, `StringProtocol` 
+   is a `Collection`
+ - The `Character` type is a common element accross different implementations
+ - `Character` is an implementation of `StringProtocol`, allowing access to its 
+   scalars etc.
  - `String.index(after:)` should advance to the next grapheme, even when the
    index points to part-way through a grapheme.
  - Similarly, `index(before:)` should move to the start of the grapheme before
@@ -513,14 +515,14 @@ issues:
 `func uppercased() -> String` |✅
 `var localizedLowercase: String` |↗️ `Text`
 `func lowercased(with: Locale?) -> String` |❌subsumed into the above
-`var capitalized: String` |✅
+`var capitalized: String` |✅ but should be a function
 `var localizedCapitalized: String` | ↗️ `Text`
 `func capitalized(with: Locale?) -> String` |❌subsumed into the above
 `var localizedUppercase: String` |↗️ `Text`
 `func uppercased(with: Locale?) -> String` |❌subsumed into the above
 `init<T : LosslessStringConvertible>(_: T)` |✅
-`init?(_: String)` |❓Why do we have this?
-`init?(`<br/>`  bytesNoCopy: UnsafeMutableRawPointer,`<br/>`  length: Int,`<br/>`  encoding: Encoding,`<br/>`  freeWhenDone: Bool)` |❓My main question about this API is whether it should be a top-level API on String, or whether it should be something like `String(SomeSpecificModelOfStringProtocol(...))`.
+`init?(_: String)` |❓This comes from `LosslessStringConvertible`. We need to search for uses of this protocol to ensure this is justified.
+`init?(`<br/>`  bytesNoCopy: UnsafeMutableRawPointer,`<br/>`  length: Int,`<br/>`  encoding: Encoding,`<br/>`  freeWhenDone: Bool)` |↗️Move to some specific model of `StringProtocol`
 `var hash: Int` | ❌We should kill off the incorrect `==` behavior and associated hash
 `func folding(`<br/>`  options: CompareOptions = default,`<br/>`  locale: Locale?) -> String` |❓Redesign this Swiss army knife; locale parameter would drop at least
 `func applyingTransform(`<br/>`  _: StringTransform, reverse: Bool) -> String?` |❓Redesign this Swiss army knife
@@ -564,8 +566,8 @@ We are recommending removing this data type in favor of `String` and
 
 **API** | **Suggested Disposition**
 ---|---
-`mutating func write(_: String)` | 
-`func write<Target : TextOutputStream>(to: inout Target)` |❓
+`mutating func write(_: String)` | ❓Streaming needs revamping
+`func write<Target : TextOutputStream>(to: inout Target)` |❓Streaming needs revamping
 
 ### Views
 
@@ -592,21 +594,21 @@ We are recommending removing this data type in favor of `String` and
 `static func <(lhs: String, rhs: String) -> Bool` |✅ Also `lhs.orderedVs(rhs)`
 `var hashValue: Int` |✅
 `func caseInsensitiveCompare(`<br/>`  _: String) -> ComparisonResult` | `lhs.orderedVs(rhs, .ignoringCase)`
-`typealias CompareOptions =` ... |❓
-`func commonPrefix(`<br/>`  with: String,`<br/>`  options: CompareOptions = default`<br/>`) -> String` | Replace with mismatch
-`func compare(`<br/>`  _: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default,`<br/>`  locale: Locale? = default`<br/>`) -> ComparisonResult` |❓
-`func components(`<br/>`  separatedBy: CharacterSet`<br/>`) -> [String]` | `split`
-`func components(separatedBy: String) -> [String]` |❓
+`typealias CompareOptions =` ... |See tables below
+`func commonPrefix(`<br/>`  with: String,`<br/>`  options: CompareOptions = default`<br/>`) -> String` | ✅ 
+`func compare(`<br/>`  _: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default,`<br/>`  locale: Locale? = default`<br/>`) -> ComparisonResult` |✅
+`func components(`<br/>`  separatedBy: CharacterSet`<br/>`) -> [String]` | `split` using matchers
+`func components(separatedBy: String) -> [String]` |`split` using matchers
 `func localizedCaseInsensitiveCompare(`<br/>`  _: String) -> ComparisonResult` |↗️ `Text`
 `func localizedCompare(`<br/>`  _: String) -> ComparisonResult` |↗️ `Text`
 `func localizedStandardCompare(`<br/>`  _: String) -> ComparisonResult` |↗️ `Text`
-`func rangeOfCharacter(`<br/>`  from: CharacterSet,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default`<br/>`) -> Range<Index>?` |❓
-`func range(`<br/>`  of: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default,`<br/>`  locale: Locale? = default`<br/>`) -> Range<Index>?` |❌subsumed into the above
+`func rangeOfCharacter(`<br/>`  from: CharacterSet,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default`<br/>`) -> Range<Index>?` |❌Doesn't make sense specifically on characters. There should be a range-of-match based on a matcher.
+`func range(`<br/>`  of: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default,`<br/>`  locale: Locale? = default`<br/>`) -> Range<Index>?` |✅This is a generalized search and we need it (on collections, too)
 `func localizedStandardContains(_: String) -> Bool` |↗️ `Text`
 `func localizedStandardRange(`<br/>`  of: String`<br/>`) -> Range<Index>?` |↗️ `Text`
-`func replacingOccurrences(`<br/>`  of: String, with: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default) -> String` |❓
-`func trimmingCharacters(in: CharacterSet) -> String` |❓
-`func contains(_: String) -> Bool` |❓
+`func replacingOccurrences(`<br/>`  of: String, with: String,`<br/>`  options: CompareOptions = default,`<br/>`  range: Range<Index>? = default) -> String` |✅Much needed but needs thought about regexes and match groups etc.
+`func trimmingCharacters(in: CharacterSet) -> String` |✅Should use matchers not just CharacterSet. Possibly left/right parameter.
+`func contains(_: String) -> Bool` |✅Is this an easy-to-use version of range? Should there be a subsequence `contains` on `Collection`?
 `func localizedCaseInsensitiveContains(_: String) -> Bool` |↗️ `Text`
 
 ### Formatting
@@ -772,6 +774,39 @@ struct CompareOptions : OptionSet {
       regularExpression
   }
 ```
+
+For String, case- and diacritic-insentivity can be done by folding first then usual comparison. See http://unicode.org/faq/casemap_charprop.html “Q: What is the difference between case mapping and case folding?”. Although we're not sure if there's well-defined diacritic folding.
+
+Generally, `forcedOrdering` seems not to be a valid option for anything.
+
+`commonPrefix:` options
+
+**Option**|**Solution**
+---|---
+caseInsensitive | with a case-insensitive matcher
+literal | run on utf16 view
+backwards | add a commonSuffix method
+anchored | makes no sense for prefix
+numeric | Foundation doesn't handle it (only used for ordering) but just about plausible a matcher could
+diacriticInsensitive | with a diacritic-insensitive matcher
+widthInsensitive | with a width-insensitive matcher
+forcedOrdering | makese no sense for prefix
+regularExpression | Foundation doesn't handle it, but probably a regex matcher could
+
+`compare:` options
+
+**Option**|**Solution**
+---|---
+caseInsensitive | valid option
+literal | use the utf16 view
+backwards | could concevably mean compare from the end, but Foundation doesn't do this
+anchored | makes no sense for compare
+numeric | expensive so possibly only on text?
+diacriticInsensitive | valid option
+widthInsensitive | valid option
+forcedOrdering | use the utf16 view 
+regularExpression | makes no sense for compare
+
 
 ## Open Questions
 
