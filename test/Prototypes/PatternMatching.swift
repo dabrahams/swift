@@ -32,22 +32,21 @@ case notFound(resumeAt: Index?)
 
 protocol Pattern {
   associatedtype Element : Equatable
-  associatedtype Index : Comparable
   associatedtype MatchData = ()
   
-  func matched<C: Collection>(atStartOf c: C) -> MatchResult<Index, MatchData>
-  where C.Index == Index, Element_<C> == Element
+  func matched<C: Collection>(atStartOf c: C) -> MatchResult<C.Index, MatchData>
+  where Element_<C> == Element
   // The following requirements go away with upcoming generics features
   , C.SubSequence : Collection, Element_<C.SubSequence> == Element
-  , C.SubSequence.Index == Index, C.SubSequence.SubSequence == C.SubSequence
+  , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence
 }
 
 extension Pattern {
-  func found<C: Collection>(in c: C) -> (extent: Range<Index>, data: MatchData)?
-  where C.Index == Index, Element_<C> == Element
+  func found<C: Collection>(in c: C) -> (extent: Range<C.Index>, data: MatchData)?
+  where Element_<C> == Element
   // The following requirements go away with upcoming generics features
   , C.SubSequence : Collection, Element_<C.SubSequence> == Element
-  , C.SubSequence.Index == Index, C.SubSequence.SubSequence == C.SubSequence
+  , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence
   {
     var i = c.startIndex
     while i != c.endIndex {
@@ -74,11 +73,11 @@ where Element_<T> : Equatable {
   typealias Element = Element_<T>
   init(_ pattern: T) { self.pattern = pattern }
   
-  func matched<C: Collection>(atStartOf c: C) -> MatchResult<Index, ()>
-  where C.Index == Index, Element_<C> == Element
+  func matched<C: Collection>(atStartOf c: C) -> MatchResult<C.Index, ()>
+  where  Element_<C> == Element
   // The following requirements go away with upcoming generics features
   , C.SubSequence : Collection, Element_<C.SubSequence> == Element
-  , C.SubSequence.Index == Index, C.SubSequence.SubSequence == C.SubSequence
+  , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence
   {
     var i = c.startIndex
     for p in pattern {
@@ -93,14 +92,20 @@ where Element_<T> : Equatable {
   fileprivate let pattern: T
 }
 
-struct MatchAnyOne<T : Equatable, Index : Comparable> : Pattern {
+extension LiteralMatch where Element == Character {
+  var caseInsensitive : () {  return () }
+  var diacriticInsensitive : () { return ()  }
+  var localized : () { return ()  }
+}
+
+struct MatchAnyOne<T : Equatable> : Pattern {
   typealias Element = T
   
-  func matched<C: Collection>(atStartOf c: C) -> MatchResult<Index, ()>
-  where C.Index == Index, Element_<C> == Element
+  func matched<C: Collection>(atStartOf c: C) -> MatchResult<C.Index, ()>
+  where  Element_<C> == Element
   // The following requirements go away with upcoming generics features
   , C.SubSequence : Collection, Element_<C.SubSequence> == Element
-  , C.SubSequence.Index == Index, C.SubSequence.SubSequence == C.SubSequence
+  , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence
   {
     return c.isEmpty
     ? .notFound(resumeAt: c.endIndex)
@@ -115,26 +120,25 @@ extension MatchAnyOne : CustomStringConvertible {
 enum MatchAny {}
 var __ : MatchAny.Type { return MatchAny.self }
 prefix func % <
-  T : Equatable, Index : Comparable
->(_: MatchAny.Type) -> MatchAnyOne<T,Index> {
+  T : Equatable
+>(_: MatchAny.Type) -> MatchAnyOne<T> {
   return MatchAnyOne()
 }
 
 /// A matcher for two other matchers in sequence.
 struct ConsecutiveMatches<M0: Pattern, M1: Pattern> : Pattern
-where M0.Element == M1.Element, M0.Index == M1.Index {
+where M0.Element == M1.Element {
   init(_ m0: M0, _ m1: M1) { self.matchers = (m0, m1) }
   fileprivate let matchers: (M0, M1)
   
   typealias Element = M0.Element
-  typealias Index = M0.Index
-  typealias MatchData = (midPoint: M0.Index, data: (M0.MatchData, M1.MatchData))
+  typealias MatchData = (midPoint: Any, data: (M0.MatchData, M1.MatchData))
 
-  func matched<C: Collection>(atStartOf c: C) -> MatchResult<Index, MatchData>
-  where C.Index == Index, Element_<C> == Element
+  func matched<C: Collection>(atStartOf c: C) -> MatchResult<C.Index, MatchData>
+  where  Element_<C> == Element
   // The following requirements go away with upcoming generics features
   , C.SubSequence : Collection, Element_<C.SubSequence> == Element
-  , C.SubSequence.Index == Index, C.SubSequence.SubSequence == C.SubSequence
+  , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence
   {
     var src0 = c[c.startIndex..<c.endIndex]
     while true {
@@ -166,16 +170,16 @@ extension ConsecutiveMatches : CustomStringConvertible {
 
 struct RepeatMatch<M0: Pattern> : Pattern {
   typealias Element = M0.Element
-  typealias MatchData = [(end: M0.Index, data: M0.MatchData)]
+  typealias MatchData = [(end: Any, data: M0.MatchData)]
   
   let singlePattern: M0
   var repeatLimits: ClosedRange<Int>
   
-  func matched<C: Collection>(atStartOf c: C) -> MatchResult<M0.Index, MatchData>
-  where C.Index == M0.Index, Element_<C> == M0.Element
+  func matched<C: Collection>(atStartOf c: C) -> MatchResult<C.Index, MatchData>
+  where Element_<C> == M0.Element
   // The following requirements go away with upcoming generics features
   , C.SubSequence : Collection, Element_<C.SubSequence> == M0.Element
-  , C.SubSequence.Index == M0.Index, C.SubSequence.SubSequence == C.SubSequence
+  , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence
   {
     var lastEnd = c.startIndex
     var rest = c.dropFirst(0)
@@ -185,7 +189,7 @@ struct RepeatMatch<M0: Pattern> : Pattern {
     while !rest.isEmpty {
       switch singlePattern.matched(atStartOf: rest) {
       case .found(let x):
-        data.append(x)
+        data.append((end: x.end, data: x.data))
         lastEnd = x.end
         if data.count == repeatLimits.upperBound { break }
         rest = rest[x.end..<rest.endIndex]
@@ -234,19 +238,18 @@ extension OneOf : CustomStringConvertible {
 }
 
 struct MatchOneOf<M0: Pattern, M1: Pattern> : Pattern
-where M0.Element == M1.Element, M0.Index == M1.Index {
+where M0.Element == M1.Element {
   init(_ m0: M0, _ m1: M1) { self.matchers = (m0, m1) }
   fileprivate let matchers: (M0, M1)
   
   typealias Element = M0.Element
-  typealias Index = M0.Index
   typealias MatchData = OneOf<M0.MatchData,M1.MatchData>
 
-  func matched<C: Collection>(atStartOf c: C) -> MatchResult<Index, MatchData>
-  where C.Index == Index, Element_<C> == Element
+  func matched<C: Collection>(atStartOf c: C) -> MatchResult<C.Index, MatchData>
+  where  Element_<C> == Element
   // The following requirements go away with upcoming generics features
   , C.SubSequence : Collection, Element_<C.SubSequence> == Element
-  , C.SubSequence.Index == Index, C.SubSequence.SubSequence == C.SubSequence
+  , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence
   {
     switch matchers.0.matched(atStartOf: c) {
     case .found(let end, let data):
@@ -275,7 +278,7 @@ postfix operator *
 postfix operator +
 
 func .. <M0: Pattern, M1: Pattern>(m0: M0, m1: M1) -> ConsecutiveMatches<M0,M1>
-where M0.Element == M1.Element, M0.Index == M1.Index {
+where M0.Element == M1.Element {
   return ConsecutiveMatches(m0, m1)
 }
 
@@ -288,9 +291,11 @@ postfix func + <M: Pattern>(m: M) -> RepeatMatch<M> {
 }
 
 func | <M0: Pattern, M1: Pattern>(m0: M0, m1: M1) -> MatchOneOf<M0,M1>
-where M0.Element == M1.Element, M0.Index == M1.Index {
+where M0.Element == M1.Element {
   return MatchOneOf(m0, m1)
 }
+
+extension String : Collection {}
 
 //===--- Just for testing -------------------------------------------------===//
 struct MatchStaticString : Pattern {
@@ -301,11 +306,11 @@ struct MatchStaticString : Pattern {
   let content: StaticString
   init(_ x: StaticString) { content = x }
   
-  func matched<C: Collection>(atStartOf c: C) -> MatchResult<Index, ()>
-  where C.Index == Index, Element_<C> == Element
+  func matched<C: Collection>(atStartOf c: C) -> MatchResult<C.Index, ()>
+  where  Element_<C> == Element
   // The following requirements go away with upcoming generics features
   , C.SubSequence : Collection, Element_<C.SubSequence> == Element
-  , C.SubSequence.Index == Index, C.SubSequence.SubSequence == C.SubSequence {
+  , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence {
     return content.withUTF8Buffer {
       LiteralMatch<Buffer, Index>($0).matched(atStartOf: c)
     }
@@ -337,10 +342,10 @@ extension Pattern where Element == UTF8.CodeUnit {
   func searchTest<C: Collection>(
     in c: C,
     format: (MatchData)->String = { String(reflecting: $0) })
-  where C.Index == Index, Element_<C> == Element
+  where  Element_<C> == Element
   // The following requirements go away with upcoming generics features
   , C.SubSequence : Collection, Element_<C.SubSequence> == Element
-  , C.SubSequence.Index == Index, C.SubSequence.SubSequence == C.SubSequence {
+  , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence {
     print("searching for /\(self)/ in \(c.u8str)...", terminator: "")
     if let (extent, data) = self.found(in: c) {
       print(
@@ -355,6 +360,7 @@ extension Pattern where Element == UTF8.CodeUnit {
     print()
   }
 }
+
 //===--- Just for testing -------------------------------------------------===//
 
 //===--- Tests ------------------------------------------------------------===//
@@ -386,24 +392,90 @@ struct PairedStructure<I: Comparable> {
   let subStructure: [PairedStructure<I>]
 }
 
-struct Paired<T: Hashable, I: Comparable> : Pattern {
+class AnyEquatableBase {
+  func isEqual(to other: AnyEquatableBase) -> Bool {
+    fatalError("overrideMe")
+  }
+}
+
+class AnyEquatableBox<T: Equatable> : AnyEquatableBase {
+  let value: T
+
+  init(_ value: T) { self.value = value }
+  
+  override func isEqual(to other: AnyEquatableBase) -> Bool {
+    if let otherSelf = other as? AnyEquatableBox<T> {
+      return self.value == otherSelf.value
+    }
+    return false
+  }
+}
+
+struct AnyEquatable : Equatable {
+  let box: AnyEquatableBase
+  init<T: Equatable>(_ x: T) {
+    box = AnyEquatableBox(x)
+  }
+  static func == (l: AnyEquatable, r: AnyEquatable) -> Bool {
+    return l.box.isEqual(to: r.box)
+  }
+}
+
+class AnyComparableBase : AnyEquatableBase {
+  func isLess(than other: AnyComparableBase) -> Bool {
+    fatalError("overrideMe")
+  }
+}
+
+class AnyComparableBox<T: Comparable> : AnyComparableBase {
+  let value: T
+
+  init(_ value: T) { self.value = value }
+  
+  override func isEqual(to other: AnyEquatableBase) -> Bool {
+    if let otherSelf = other as? AnyComparableBox<T> {
+      return self.value == otherSelf.value
+    }
+    return false
+  }
+  override func isLess(than other: AnyComparableBase) -> Bool {
+    guard let otherSelf = other as? AnyComparableBox<T> else {
+      fatalError("mixed type ordering comparison not supported")
+    }
+    return self.value < otherSelf.value
+  }
+}
+
+struct AnyComparable : Comparable {
+  let box: AnyComparableBase
+  init<T: Comparable>(_ x: T) {
+    box = AnyComparableBox(x)
+  }
+  static func == (l: AnyComparable, r: AnyComparable) -> Bool {
+    return l.box.isEqual(to: r.box)
+  }
+  static func < (l: AnyComparable, r: AnyComparable) -> Bool {
+    return l.box.isLess(than: r.box)
+  }
+}
+
+struct Paired<T: Hashable> : Pattern {
   typealias Element = T
-  typealias Index = I
-  typealias MatchData  = PairedStructure<I>
+  typealias MatchData  = PairedStructure<AnyComparable>
   
   let pairs: Dictionary<T,T>
   
-  func matched<C: Collection>(atStartOf c: C) -> MatchResult<Index, MatchData>
-  where C.Index == Index, Element_<C> == Element
+  func matched<C: Collection>(atStartOf c: C) -> MatchResult<C.Index, MatchData>
+  where Element_<C> == Element
   // The following requirements go away with upcoming generics features
   , C.SubSequence : Collection, Element_<C.SubSequence> == Element
-  , C.SubSequence.Index == Index, C.SubSequence.SubSequence == C.SubSequence {
+  , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence {
     guard let closer = c.first.flatMap({ pairs[$0] }) else {
       return .notFound(resumeAt: nil)
     }
-    var subStructure: [PairedStructure<I>] = []
+    var subStructure: [PairedStructure<AnyComparable>] = []
     var i = c.index(after: c.startIndex)
-    var resumption: Index? = nil
+    var resumption: C.Index? = nil
     
     while i != c.endIndex {
       if let m = self.found(in: c[i..<c.endIndex]) {
@@ -417,7 +489,8 @@ struct Paired<T: Hashable, I: Comparable> : Pattern {
           return .found(
             end: nextI,
             data: PairedStructure(
-              bounds: c.startIndex..<nextI, subStructure: subStructure))
+              bounds: AnyComparable(c.startIndex)..<AnyComparable(nextI),
+              subStructure: subStructure))
         }
         i = nextI
       }
