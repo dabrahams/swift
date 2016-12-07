@@ -100,8 +100,9 @@ protocol Pattern {
   associatedtype Element : Equatable
   associatedtype MatchData = ()
   
-  func matched<C: Collection>(atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
-    -> MatchResult<C.Index, MatchData>
+  func matched<C: Collection>(
+    atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>]
+  ) -> MatchResult<C.Index, MatchData>
   where Element_<C> == Element
   // The following requirements go away with upcoming generics features
   , C.SubSequence : Collection, Element_<C.SubSequence> == Element
@@ -109,7 +110,9 @@ protocol Pattern {
 }
 
 extension Pattern {
-  func found<C: Collection>(in c: C, storingCapturesIn captures: inout [Range<C.Index>]) -> (extent: Range<C.Index>, data: MatchData)?
+  func found<C: Collection>(
+    in c: C, storingCapturesIn captures: inout [Range<C.Index>])
+  -> (extent: Range<C.Index>, data: MatchData)?
   where Element_<C> == Element
   // The following requirements go away with upcoming generics features
   , C.SubSequence : Collection, Element_<C.SubSequence> == Element
@@ -118,7 +121,8 @@ extension Pattern {
     var i = c.startIndex
     let originalCaptureCount = captures.count
     while i != c.endIndex {
-      let m = self.matched(atStartOf: c[i..<c.endIndex], storingCapturesIn: &captures)
+      let m = self.matched(
+        atStartOf: c[i..<c.endIndex], storingCapturesIn: &captures)
       switch m {
       case .found(let end, let data):
         return (extent: i..<end, data: data)
@@ -142,7 +146,8 @@ where Element_<T> : Equatable {
   typealias Element = Element_<T>
   init(_ pattern: T) { self.pattern = pattern }
   
-  func matched<C: Collection>(atStartOf c: C, storingCapturesIn: inout [Range<C.Index>])
+  func matched<C: Collection>(
+    atStartOf c: C, storingCapturesIn: inout [Range<C.Index>])
     -> MatchResult<C.Index, ()>
   where  Element_<C> == Element
   // The following requirements go away with upcoming generics features
@@ -171,7 +176,8 @@ extension LiteralMatch where Element == Character {
 struct MatchAnyOne<T : Equatable> : Pattern {
   typealias Element = T
   
-  func matched<C: Collection>(atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
+  func matched<C: Collection>(
+    atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
     -> MatchResult<C.Index, ()>
   where  Element_<C> == Element
   // The following requirements go away with upcoming generics features
@@ -205,7 +211,8 @@ where M0.Element == M1.Element {
   typealias Element = M0.Element
   typealias MatchData = (midPoint: Any, data: (M0.MatchData, M1.MatchData))
 
-  func matched<C: Collection>(atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
+  func matched<C: Collection>(
+    atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
     -> MatchResult<C.Index, MatchData>
   where  Element_<C> == Element
   // The following requirements go away with upcoming generics features
@@ -250,7 +257,8 @@ struct RepeatMatch<M0: Pattern> : Pattern {
   let singlePattern: M0
   var repeatLimits: ClosedRange<Int>
   
-  func matched<C: Collection>(atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
+  func matched<C: Collection>(
+    atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
     -> MatchResult<C.Index, MatchData>
   where Element_<C> == M0.Element
   // The following requirements go away with upcoming generics features
@@ -263,7 +271,8 @@ struct RepeatMatch<M0: Pattern> : Pattern {
 
   searchLoop:
     while !rest.isEmpty {
-      switch singlePattern.matched(atStartOf: rest, storingCapturesIn: &captures) {
+      switch singlePattern.matched(
+        atStartOf: rest, storingCapturesIn: &captures) {
       case .found(let x):
         data.append((end: x.end, data: x.data))
         lastEnd = x.end
@@ -321,7 +330,8 @@ where M0.Element == M1.Element {
   typealias Element = M0.Element
   typealias MatchData = OneOf<M0.MatchData,M1.MatchData>
 
-  func matched<C: Collection>(atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
+  func matched<C: Collection>(
+    atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
     -> MatchResult<C.Index, MatchData>
   where  Element_<C> == Element
   // The following requirements go away with upcoming generics features
@@ -383,14 +393,16 @@ struct MatchStaticString : Pattern {
   let content: StaticString
   init(_ x: StaticString) { content = x }
   
-  func matched<C: Collection>(atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
+  func matched<C: Collection>(
+    atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
     -> MatchResult<C.Index, ()>
   where  Element_<C> == Element
   // The following requirements go away with upcoming generics features
   , C.SubSequence : Collection, Element_<C.SubSequence> == Element
   , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence {
     return content.withUTF8Buffer {
-      LiteralMatch<Buffer, Index>($0).matched(atStartOf: c, storingCapturesIn: &captures)
+      LiteralMatch<Buffer, Index>($0).matched(
+        atStartOf: c, storingCapturesIn: &captures)
     }
   }
 }
@@ -480,7 +492,8 @@ struct Paired<T: Hashable> : Pattern {
   
   let pairs: Dictionary<T,T>
   
-  func matched<C: Collection>(atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
+  func matched<C: Collection>(
+    atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
     -> MatchResult<C.Index, MatchData>
   where Element_<C> == Element
   // The following requirements go away with upcoming generics features
@@ -494,7 +507,9 @@ struct Paired<T: Hashable> : Pattern {
     var resumption: C.Index? = nil
     
     while i != c.endIndex {
-      if let m = self.found(in: c[i..<c.endIndex], storingCapturesIn: &captures) {
+      if let m = self.found(
+        in: c[i..<c.endIndex], storingCapturesIn: &captures
+      ) {
         i = m.extent.upperBound
         subStructure.append(m.data)
         resumption = resumption ?? i
