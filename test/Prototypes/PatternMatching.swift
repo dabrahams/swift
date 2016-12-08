@@ -14,6 +14,22 @@
 // REQUIRES: swift_test_mode_optimize_none
 
 //===--- Niceties ---------------------------------------------------------===//
+extension String {
+  init<S: Sequence, Encoding: UnicodeCodec>(
+    decoding codeUnits: S, as: Encoding.Type
+  )
+  where S.Iterator.Element == Encoding.CodeUnit {
+    var r = "".unicodeScalars
+    func append1(_ u: UInt32) { r.append(UnicodeScalar(u)!) }
+    _ = transcode(
+      codeUnits.makeIterator(),
+      from: Encoding.self, to: UTF32.self, stoppingOnError: false,
+      into: append1
+    ) 
+    self = String(r)
+  }
+}
+
 typealias Element_<S: Sequence> = S.Iterator.Element
 extension Collection {
   func index(_ d: IndexDistance) -> Index {
@@ -21,72 +37,6 @@ extension Collection {
   }
   func offset(of i: Index) -> IndexDistance {
     return distance(from: startIndex, to: i)
-  }
-}
-class AnyEquatableBase {
-  func isEqual(to other: AnyEquatableBase) -> Bool {
-    fatalError("overrideMe")
-  }
-}
-
-class AnyEquatableBox<T: Equatable> : AnyEquatableBase {
-  let value: T
-
-  init(_ value: T) { self.value = value }
-  
-  override func isEqual(to other: AnyEquatableBase) -> Bool {
-    if let otherSelf = other as? AnyEquatableBox<T> {
-      return self.value == otherSelf.value
-    }
-    return false
-  }
-}
-
-struct AnyEquatable : Equatable {
-  let box: AnyEquatableBase
-  init<T: Equatable>(_ x: T) {
-    box = AnyEquatableBox(x)
-  }
-  static func == (l: AnyEquatable, r: AnyEquatable) -> Bool {
-    return l.box.isEqual(to: r.box)
-  }
-}
-
-class AnyComparableBase : AnyEquatableBase {
-  func isLess(than other: AnyComparableBase) -> Bool {
-    fatalError("overrideMe")
-  }
-}
-
-class AnyComparableBox<T: Comparable> : AnyComparableBase {
-  let value: T
-
-  init(_ value: T) { self.value = value }
-  
-  override func isEqual(to other: AnyEquatableBase) -> Bool {
-    if let otherSelf = other as? AnyComparableBox<T> {
-      return self.value == otherSelf.value
-    }
-    return false
-  }
-  override func isLess(than other: AnyComparableBase) -> Bool {
-    guard let otherSelf = other as? AnyComparableBox<T> else {
-      fatalError("mixed type ordering comparison not supported")
-    }
-    return self.value < otherSelf.value
-  }
-}
-
-struct AnyComparable : Comparable {
-  let box: AnyComparableBase
-  init<T: Comparable>(_ x: T) {
-    box = AnyComparableBox(x)
-  }
-  static func == (l: AnyComparable, r: AnyComparable) -> Bool {
-    return l.box.isEqual(to: r.box)
-  }
-  static func < (l: AnyComparable, r: AnyComparable) -> Bool {
-    return l.box.isLess(than: r.box)
   }
 }
 //===--- Niceties ---------------------------------------------------------===//
@@ -209,7 +159,7 @@ where M0.Element == M1.Element {
   fileprivate let matchers: (M0, M1)
   
   typealias Element = M0.Element
-  typealias MatchData = (midPoint: Any, data: (M0.MatchData, M1.MatchData))
+  typealias MatchData = (M0.MatchData, M1.MatchData)
 
   func matched<C: Collection>(
     atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
@@ -227,7 +177,7 @@ where M0.Element == M1.Element {
         switch matchers.1.matched(
           atStartOf: c[end0..<c.endIndex], storingCapturesIn: &captures) {
         case .found(let end1, let data1):
-          return .found(end: end1, data: (midPoint: end0, data: (data0, data1)))
+          return .found(end: end1, data: (data0, data1))
         case .notFound(_):
           if src0.isEmpty {
             // I don't think we can know anything interesting about where to
@@ -240,6 +190,7 @@ where M0.Element == M1.Element {
           captures.removeLast(captures.count - originalCaptureCount)
         }
       case .notFound(let j):
+        captures.removeLast(captures.count - originalCaptureCount)
         return .notFound(resumeAt: j)
       }
     }
@@ -250,9 +201,43 @@ extension ConsecutiveMatches : CustomStringConvertible {
   var description: String { return "(\(matchers.0))(\(matchers.1))" }
 }
 
+struct CaptureMatch<M0: Pattern> : Pattern {
+  typealias Element = M0.Element
+  typealias MatchData = (M0.MatchData, captureIndex: Int)
+  
+  let base: M0
+  
+  func matched<C: Collection>(
+    atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
+    -> MatchResult<C.Index, MatchData>
+  where Element_<C> == M0.Element
+  // The following requirements go away with upcoming generics features
+  , C.SubSequence : Collection, Element_<C.SubSequence> == M0.Element
+  , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence
+  {
+    switch base.matched(atStartOf: c, storingCapturesIn: &captures) {
+    case .found(let end, let data):
+      let i = captures.count
+      captures.append(c.startIndex..<end)
+      return .found(end: end, data: (data, i))
+    case .notFound(let resumptionPoint):
+      return .notFound(resumeAt: resumptionPoint)
+    }
+  }
+}
+
+extension CaptureMatch : CustomStringConvertible {
+  var description: String { return "{{\(base))}}" }
+}
+extension Pattern {
+  var capture: CaptureMatch<Self> {
+    return CaptureMatch(base: self)
+  }
+}
+
 struct RepeatMatch<M0: Pattern> : Pattern {
   typealias Element = M0.Element
-  typealias MatchData = [(end: Any, data: M0.MatchData)]
+  typealias MatchData = [M0.MatchData]
   
   let singlePattern: M0
   var repeatLimits: ClosedRange<Int>
@@ -274,7 +259,7 @@ struct RepeatMatch<M0: Pattern> : Pattern {
       switch singlePattern.matched(
         atStartOf: rest, storingCapturesIn: &captures) {
       case .found(let x):
-        data.append((end: x.end, data: x.data))
+        data.append(x.data)
         lastEnd = x.end
         if data.count == repeatLimits.upperBound { break }
         rest = rest[x.end..<rest.endIndex]
@@ -338,10 +323,12 @@ where M0.Element == M1.Element {
   , C.SubSequence : Collection, Element_<C.SubSequence> == Element
   , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence
   {
+    let originalCaptureCount = captures.count
     switch matchers.0.matched(atStartOf: c, storingCapturesIn: &captures) {
     case .found(let end, let data):
       return .found(end: end, data: .a(data))
     case .notFound(let r0):
+      captures.removeLast(captures.count - originalCaptureCount)
       switch matchers.1.matched(atStartOf: c, storingCapturesIn: &captures) {
       case .found(let end, let data):
         return .found(end: end, data: .b(data))
@@ -445,7 +432,7 @@ extension Pattern where Element == UTF8.CodeUnit {
         "\(c.offset(of: extent.lowerBound)..<c.offset(of: extent.upperBound)):",
         c[extent].u8str,
         MatchData.self == Void.self ? "" : "\ndata: \(format(data))")
-      print(captures.map { c[$0] })
+      print(captures.map { String(decoding: c[$0], as: UTF8.self) })
     }
     else {
       print("NOT FOUND")
@@ -464,7 +451,7 @@ let source2 = Array("hack hack cough cough cough spork".utf8)
 (%"fox").searchTest(in: source)
 (%"fog").searchTest(in: source)
 (%"fox" .. %" box").searchTest(in: source)
-(%"fox" .. %" jump").searchTest(in: source)
+(%"fox" .. (%" jump").capture).searchTest(in: source)
 (%"cough")*.searchTest(in: source2)
 (%"sneeze")+.searchTest(in: source2)
 (%"hack ")*.searchTest(in: source2)
@@ -472,63 +459,10 @@ let source2 = Array("hack hack cough cough cough spork".utf8)
 
 // The final * steps around <rdar://29229409>
 let fancyPattern
-  = %"quick "..((%"brown" | %"black" | %"fox" | %"chicken") .. %" ")+ 
+  = %"quick "..((%"brown" | %"black" | %"fox" | %"chicken").capture .. %" ")+.capture 
   .. (%__)* .. %"do"
 
 fancyPattern.searchTest(in: source)
-
-//===--- Parsing pairs ----------------------------------------------------===//
-// The beginnings of what it will take to wrap and indent m.data in the end of
-// the last test, to make it readable.
-struct PairedStructure<I: Comparable> {
-  let bounds: Range<I>
-  let subStructure: [PairedStructure<I>]
-}
-
-
-struct Paired<T: Hashable> : Pattern {
-  typealias Element = T
-  typealias MatchData  = PairedStructure<AnyComparable>
-  
-  let pairs: Dictionary<T,T>
-  
-  func matched<C: Collection>(
-    atStartOf c: C, storingCapturesIn captures: inout [Range<C.Index>])
-    -> MatchResult<C.Index, MatchData>
-  where Element_<C> == Element
-  // The following requirements go away with upcoming generics features
-  , C.SubSequence : Collection, Element_<C.SubSequence> == Element
-  , C.SubSequence.Index == C.Index, C.SubSequence.SubSequence == C.SubSequence {
-    guard let closer = c.first.flatMap({ pairs[$0] }) else {
-      return .notFound(resumeAt: nil)
-    }
-    var subStructure: [PairedStructure<AnyComparable>] = []
-    var i = c.index(after: c.startIndex)
-    var resumption: C.Index? = nil
-    
-    while i != c.endIndex {
-      if let m = self.found(
-        in: c[i..<c.endIndex], storingCapturesIn: &captures
-      ) {
-        i = m.extent.upperBound
-        subStructure.append(m.data)
-        resumption = resumption ?? i
-      }
-      else {
-        let nextI = c.index(after: i)
-        if c[i] == closer {
-          return .found(
-            end: nextI,
-            data: PairedStructure(
-              bounds: AnyComparable(c.startIndex)..<AnyComparable(nextI),
-              subStructure: subStructure))
-        }
-        i = nextI
-      }
-    }
-    return .notFound(resumeAt: resumption)
-  }
-}
 
 // Local Variables:
 // swift-syntax-check-fn: swift-syntax-check-single-file
