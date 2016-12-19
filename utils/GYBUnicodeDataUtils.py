@@ -63,6 +63,11 @@ class GraphemeClusterBreakPropertyTable(UnicodeProperty):
         'T': 10,
         'LV': 11,
         'LVT': 12,
+        'E_Base': 13,
+        'E_Modifier': 14,
+        'ZWJ': 15,
+        'Glue_After_Zwj': 16,
+        'E_Base_GAZ': 17
     }
 
     def __init__(self, grapheme_break_property_file_name):

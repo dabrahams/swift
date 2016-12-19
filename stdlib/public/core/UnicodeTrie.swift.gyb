@@ -61,6 +61,11 @@ enum _GraphemeClusterBreakPropertyValue : Int {
   case T = 10
   case LV = 11
   case LVT = 12
+  case E_Base = 13,
+  case E_Modifier = 14,
+  case ZWJ = 15,
+  case Glue_After_Zwj = 15,
+  case E_Base_GAZ = 16
 }
 
 // It is expensive to convert a raw enum value to an enum, so we use this type
