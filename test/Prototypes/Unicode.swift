@@ -1,5 +1,4 @@
-// RUN: %target-build-swift -I %S/icu %s -o %t
-// RUN: %target-run %t
+// RUN: rm %t && %target-build-swift -I %S/icu %s -o %t && %target-run %t
 // REQUIRES: executable_test
 
 import StdlibUnittest
@@ -201,133 +200,75 @@ protocol UnicodeStorage {
   func isInFastCOrDForm(scan: Bool/* = true*/) -> Bool
 }
 
+struct UTextContext {
+  var storage: UnsafeRawPointer
+  let nativeLength: @convention(thin) (_ storage: UnsafeRawPointer, ()) -> Int64
+
+  public init<S: UnicodeStorage>(_ s: UnsafePointer<S>) {
+    storage = UnsafeRawPointer(s)
+    
+    func typeErased<Args, R>(_ f: @escaping @convention(thin) (UnsafePointer<S>, Args)->R)
+      -> @convention(thin) (UnsafeRawPointer, Args) -> R {
+      return { p, args in f(p.assumingMemoryBound(to: S.self), args) }
+    }
+    
+    nativeLength = typeErased { (s, args:())->Int64 in
+      numericCast(s.pointee.codeUnits.count)
+    }
+  }
+}
+
 extension UnicodeStorage {
   func withUText<R>(_ body: (UnsafePointer<UText>)->R) -> R {
-    var vtable = UTextFuncs(
-      tableSize: Int32(MemoryLayout<UTextFuncs>.stride),
-      reserved1: 0,
-      reserved2: 0,
-      reserved3: 0,
 
-      // UText* UTextClone(
-      //   UText *dest, const UText *src, UBool deep, UErrorCode *status)
-      //
-      // clone a UText. Much like opening a UText where the source text is
-      // itself another UText.
-      //
-      // A deep clone will copy both the UText data structures and the
-      // underlying text. The original and cloned UText will operate completely
-      // independently; modifications made to the text in one will not effect
-      // the other. Text providers are not required to support deep clones. The
-      // user of clone() must check the status return and be prepared to handle
-      // failures.
-      //
-      // A shallow clone replicates only the UText data structures; it does not
-      // make a copy of the underlying text. Shallow clones can be used as an
-      // efficient way to have multiple iterators active in a single text string
-      // that is not being modified.
-      //
-      // A shallow clone operation must not fail except for truly exceptional
-      // conditions such as memory allocation failures.
-      //
-      // A UText and its clone may be safely concurrently accessed by separate
-      // threads. This is true for both shallow and deep clones. It is the
-      // responsibility of the Text Provider to ensure that this thread safety
-      // constraint is met.
-      
-      clone: nil, //
+    var copy = self
+    var c = UTextContext(&copy)
+    return withUnsafePointer(to: &c) { pc in
+      var vtable = UTextFuncs(
+        tableSize: Int32(MemoryLayout<UTextFuncs>.stride),
+        reserved1: 0, reserved2: 0, reserved3: 0,
+        clone: nil,
+        nativeLength: { u in
+          let p = u!.pointee.context.assumingMemoryBound(to: UTextContext.self)
+          return numericCast(p.pointee.nativeLength(p.pointee.storage, ()))
+          },
+        access: nil,
+        extract: nil,
+        replace: nil,
+        copy: nil,
+        mapOffsetToNative: nil,
+        mapNativeIndexToUTF16: nil,
+        close: nil,
+        spare1: nil, spare2: nil, spare3: nil)
 
-      // int64_t UTextNativeLength(UText *ut)
-      //
-      // the length, in the native units of the original text string.
-      nativeLength: { return numericCast(codeUnits.count) }, //
-
-      // UBool UTextAccess(UText *ut, int64_t nativeIndex, UBool forward)
-      //
-      // Get the description of the text chunk containing the text at a
-      // requested native index. The UText's iteration position will be left at
-      // the requested index. If the index is out of bounds, the iteration
-      // position will be left at the start or end of the string, as
-      // appropriate.
-      //
-      // Chunks must begin and end on code point boundaries. A single code point
-      // comprised of multiple storage units must never span a chunk boundary.
-      access: nil, //
-
-      // typedef int32_t UTextExtract(UText *ut, int64_t nativeStart, int64_t
-      // nativeLimit, UChar *dest, int32_t destCapacity, UErrorCode *status)
-      // 
-      // Extract text from a UText into a UChar buffer. The range of text to be
-      // extracted is specified in the native indices of the UText
-      // provider. These may not necessarily be UTF-16 indices.
-      // 
-      // The size (number of 16 bit UChars) in the data to be extracted is
-      // returned. The full amount is returned, even when the specified buffer
-      // size is smaller.
-      // 
-      // The extracted string will (if you are a user) / must (if you are a text
-      // provider) be NUL-terminated if there is sufficient space in the
-      // destination buffer.
-
-      extract: nil, //
-
-      
-      replace: nil,
-      copy: nil,
-      
-      // int64_t UTextMapOffsetToNative(const UText *ut)
-      // 
-      // Map from the current UChar offset within the current text chunk to the
-      // corresponding native index in the original source text.
-      // 
-      // This is required only for text providers that do not use native UTF-16
-      // indexes.
-      mapOffsetToNative: nil,
-
-
-      // int32_t UTextMapNativeIndexToUTF16(const UText *ut, int64_t nativeIndex)
-      // Function type declaration for UText.mapIndexToUTF16().
-      // 
-      // Map from a native index to a UChar offset within a text chunk. Behavior
-      // is undefined if the native index does not fall within the current
-      // chunk.
-      // 
-      // This function is required only for text providers that do not use
-      // native UTF-16 indexes.
-      mapNativeIndexToUTF16: nil,
-      
-      close: nil,
-      spare1: nil,
-      spare2: nil,
-      spare3: nil)
-
-    func impl(
-      _ vtable: UnsafePointer<UTextFuncs>,
-      _ body: (UnsafePointer<UText>)->R // why must I pass body explicitly here?
-    ) -> R {                            // if I don't, the compiler complains it
-                                        // might escape.
-      var u = UText(
-        magic: UInt32(UTEXT_MAGIC),
-        flags: 0,
-        providerProperties: 0,
-        sizeOfStruct: Int32(MemoryLayout<UText>.stride),
-        chunkNativeLimit: 0,
-        extraSize: 0,
-        nativeIndexingLimit: 0,
-        chunkNativeStart: 0,
-        chunkOffset: 0,
-        chunkLength: 0,
-        chunkContents: nil,
-        pFuncs: vtable,
-        pExtra: nil,
-        context: nil,
-        p: nil, q: nil, r: nil,
-        privP: nil,
-        a: 0, b: 0, c: 0,
-        privA: 0, privB: 0, privC: 0)
-      return body(&u)
+      func impl(
+        _ vtable: UnsafePointer<UTextFuncs>,
+        _ body: (UnsafePointer<UText>)->R // why must I pass body explicitly here?
+      ) -> R {                            // if I don't, the compiler complains it
+        // might escape.
+        var u = UText(
+          magic: UInt32(UTEXT_MAGIC),
+          flags: 0,
+          providerProperties: 0,
+          sizeOfStruct: Int32(MemoryLayout<UText>.stride),
+          chunkNativeLimit: 0,
+          extraSize: 0,
+          nativeIndexingLimit: 0,
+          chunkNativeStart: 0,
+          chunkOffset: 0,
+          chunkLength: 0,
+          chunkContents: nil,
+          pFuncs: vtable,
+          pExtra: nil,
+          context: nil,
+          p: nil, q: nil, r: nil,
+          privP: nil,
+          a: 0, b: 0, c: 0,
+          privA: 0, privB: 0, privC: 0)
+        return body(&u)
+      }
+      return impl(&vtable, body)
     }
-    return impl(&vtable, body)
   }
 }
 
