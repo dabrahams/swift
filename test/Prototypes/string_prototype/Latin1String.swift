@@ -6,7 +6,7 @@ import Swift
 // and data stored in _StringBuffer
 struct Latin1String {
   typealias Element = UInt8
-  typealias CodeUnits = _StringBuffer<Element>
+  typealias CodeUnits = _StringBuffer<_Latin1StringStorage>
   typealias Encoding = Latin1
   typealias Storage = UnicodeStorage<CodeUnits, Encoding>
   var _storage: Storage
