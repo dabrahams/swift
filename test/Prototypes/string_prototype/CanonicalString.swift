@@ -4,7 +4,7 @@ import Swift
 // In-memory UTF16 encoding in TODO-normal-form.
 struct SwiftCanonicalString {
   typealias Element = UInt16
-  typealias CodeUnits = _StringBuffer<Element>
+  typealias CodeUnits = _StringBuffer<_UTF16StringStorage>
   typealias Encoding = UTF16
   typealias Storage = UnicodeStorage<CodeUnits, Encoding>
   var _storage: Storage
