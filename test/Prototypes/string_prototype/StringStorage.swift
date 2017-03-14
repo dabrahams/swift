@@ -157,7 +157,8 @@ extension _SwiftLatin1StringHeader : _BoundedStorageHeader {
 
 protocol _BoundedStorage
   : class, RandomAccessCollection, 
-    MutableCollection/*, RangeReplaceableCollection*/ {
+    MutableCollection, 
+    RangeReplaceableCollection {
   associatedtype Element
   associatedtype Header : _BoundedStorageHeader
   
@@ -177,6 +178,10 @@ protocol _BoundedStorage
 }
 
 extension _BoundedStorage {
+  init() {
+    self.init(Self._emptyInstance())
+  }
+  
   init(
     minimumCapacity: Int = 0,
     makeInitialHeader: (_ allocatedCapacity: Int)->Header) {
@@ -222,8 +227,10 @@ extension _BoundedStorage {
   }
 }
 
-/// Fulfills the RandomAccessCollection requirements
+/// Fulfills the RandomAccessCollection and MutableCollection requirements
 extension _BoundedStorage {
+  typealias Index = Int
+  
   @nonobjc
   public var startIndex: Int { return 0 }
   @nonobjc
@@ -243,6 +250,84 @@ extension _BoundedStorage {
   public var count: Int {
     get { return numericCast(_header.count) }
     set { _header.count = numericCast(newValue) }
+  }
+}
+
+/// Fulfills the RangeReplaceableCollection requirements
+extension _BoundedStorage {
+  public func replaceSubrange<C>(
+    _ subrange: Range<Index>,
+    with newElements: C
+  ) where C : Collection, 
+    C.Iterator.Element == Iterator.Element {
+    let oldCount = self.count
+    let eraseCount = subrange.count
+
+    let growth = newCount - eraseCount
+    self.count = oldCount + growth
+
+    let elements = self.subscriptBaseAddress
+    let oldTailIndex = subrange.upperBound
+    let oldTailStart = elements + oldTailIndex
+    let newTailIndex = oldTailIndex + growth
+    let newTailStart = oldTailStart + growth
+    let tailCount = oldCount - subrange.upperBound
+
+    if growth > 0 {
+      // Slide the tail part of the buffer forwards, in reverse order
+      // so as not to self-clobber.
+      newTailStart.moveInitialize(from: oldTailStart, count: tailCount)
+
+      // Assign over the original subrange
+      var i = newValues.startIndex
+      for j in CountableRange(subrange) {
+        elements[j] = newValues[i]
+        newValues.formIndex(after: &i)
+      }
+      // Initialize the hole left by sliding the tail forward
+      for j in oldTailIndex..<newTailIndex {
+        (elements + j).initialize(to: newValues[i])
+        newValues.formIndex(after: &i)
+      }
+      _expectEnd(of: newValues, is: i)
+    }
+    else { // We're not growing the buffer
+      // Assign all the new elements into the start of the subrange
+      var i = subrange.lowerBound
+      var j = newValues.startIndex
+      for _ in 0..<newCount {
+        elements[i] = newValues[j]
+        i += 1
+        newValues.formIndex(after: &j)
+      }
+      _expectEnd(of: newValues, is: j)
+
+      // If the size didn't change, we're done.
+      if growth == 0 {
+        return
+      }
+
+      // Move the tail backward to cover the shrinkage.
+      let shrinkage = -growth
+      if tailCount > shrinkage {   // If the tail length exceeds the shrinkage
+
+        // Assign over the rest of the replaced range with the first
+        // part of the tail.
+        newTailStart.moveAssign(from: oldTailStart, count: shrinkage)
+
+        // Slide the rest of the tail back
+        oldTailStart.moveInitialize(
+          from: oldTailStart + shrinkage, count: tailCount - shrinkage)
+      }
+      else {                      // Tail fits within erased elements
+        // Assign over the start of the replaced range with the tail
+        newTailStart.moveAssign(from: oldTailStart, count: tailCount)
+
+        // Destroy elements remaining after the tail in subrange
+        (newTailStart + tailCount).deinitialize(
+          count: shrinkage - tailCount)
+      }
+    }
   }
 }
 
