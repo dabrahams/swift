@@ -5,10 +5,10 @@ import Swift
 struct String {
   enum Contents {
     // Swift canonical string: UTF-16 in TODO-normal-form
-    case canonical(SwiftCanonicalString)
+    case canonical(_UTF16StringStorage)
 
     // 8-bit Latin1
-    case latin1(Latin1String)
+    case latin1(_Latin1StringStorage)
 
     #if false
     // Unknown: we are a buffer of bytes representing code units and an
