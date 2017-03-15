@@ -174,8 +174,7 @@ extension _SwiftLatin1StringHeader : _BoundedStorageHeader {
 /// A class that presents its contiguous array of Elements as a
 /// random-access, range-replaceable collection
 protocol _BoundedStorage
-: class, MutableCollection, 
-    RandomAccessCollection,   
+: class, ContiguouslyStoredMutableCollection, 
     FactoryInitializable  // Allows us to code init in terms of Builtin.allocWithTailElems_1
   , RangeReplaceableCollection {
 
@@ -231,7 +230,7 @@ extension _BoundedStorage {
   }
   
   func withUnsafeMutableBufferPointer<R>(
-    _ body: (inout UnsafeMutableBufferPointer<Element>) throws->R
+    _ body: (UnsafeMutableBufferPointer<Iterator.Element>) throws->R
   ) rethrows -> R {
     defer { _fixLifetime(self) }
     var buffer = UnsafeMutableBufferPointer(
@@ -239,6 +238,7 @@ extension _BoundedStorage {
     return try body(&buffer)
   }
 
+  /*
   func withUnsafeBufferPointer<R>(
     _ body: (UnsafeBufferPointer<Element>) throws->R
   ) rethrows -> R {
@@ -246,6 +246,7 @@ extension _BoundedStorage {
       try body(UnsafeBufferPointer(start: $0.baseAddress, count: $0.count))
     }
   }
+  */
 }
 
 /// Fulfills the RandomAccessCollection and MutableCollection requirements
