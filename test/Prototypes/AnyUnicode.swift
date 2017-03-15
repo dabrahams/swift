@@ -728,6 +728,14 @@ case latin1(_Latin1StringStorage)
 case any(AnyUnicodeBox)
 }
 
+extension _UTF16StringStorage : AnyUnicode {
+  
+}
+
+extension _Latin1StringStorage : AnyUnicode {
+  
+}
+
 extension AnyStringContents : AnyUnicode {
   var encoding: AnyUnicodeEncoding.Type {
     switch self {
@@ -883,6 +891,18 @@ extension AnyStringContents : AnyUnicode {
       return base.isKnownNFCNormalized
     }
   }
+
+  init<T: AnyUnicode>(_ x: T) {
+    if let s = x as? _Latin1StringStorage {
+      self = .latin1(s)
+    }
+    else if let s = x as? _UTF16StringStorage {
+      self = .utf16(s)
+    }
+    else {
+      self = .any(AnyUnicodeBox(wrapping: x))
+    }
+  }
 }
 
 print(MemoryLayout<UTF16CompatibleStringContents>.size)
@@ -895,4 +915,16 @@ suite.test("basics") {
   expectTrue(x.elementsEqual(y))
 }
 
+suite.test("AnyStringContents") {
+  let sample = "abcdefghijklmnopqrstuvwxyz\n"
+  + "🇸🇸🇬🇱🇱🇸🇩🇯🇺🇸\n"
+  + "Σὲ 👥🥓γνωρίζω ἀπὸ τὴν κόψη χαῖρε, ὦ χαῖρε, ᾿Ελευθεριά!\n"
+  + "Οὐχὶ ταὐτὰ παρίσταταί μοι γιγνώσκειν, ὦ ἄνδρες ᾿Αθηναῖοι,\n"
+  + "გთხოვთ ახლავე გაიაროთ რეგისტრაცია Unicode-ის მეათე საერთაშორისო\n"
+  + "Зарегистрируйтесь сейчас на Десятую Международную Конференцию по\n"
+  + "  ๏ แผ่นดินฮั่นเสื่อมโทรมแสนสังเวช  พระปกเกศกองบู๊กู้ขึ้นใหม่\n"
+  + "ᚻᛖ ᚳᚹᚫᚦ ᚦᚫᛏ ᚻᛖ ᛒᚢᛞᛖ ᚩᚾ ᚦᚫᛗ ᛚᚪᚾᛞᛖ ᚾᚩᚱᚦᚹᛖᚪᚱᛞᚢᛗ ᚹᛁᚦ ᚦᚪ ᚹᛖᛥᚫ"
+
+  var s = AnyStringContents(_UTF16StringStorage(sample.utf16))
+}
 runAllTests()
