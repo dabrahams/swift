@@ -29,6 +29,7 @@ set(SWIFTLIB_ESSENTIAL
   AssertCommon.swift
   BidirectionalCollection.swift
   Bool.swift
+  BoundedBufferReference.swift
   BoundedCapacity.swift
   BridgeObjectiveC.swift
   BridgeStorage.swift

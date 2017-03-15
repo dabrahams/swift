@@ -57,6 +57,7 @@
     "Existential.swift",
     "WriteBackMutableSlice.swift",
     "UnfoldSequence.swift",
+    "BoundedBufferReference.swift",
     "BoundedCapacity.swift",
     "UnboundCapacity.swift",
     {
