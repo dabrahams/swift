@@ -9,8 +9,10 @@
 // See https://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
 //
 //===----------------------------------------------------------------------===//
-// RUN: %target-run-simple-swift
+// RUN: %target-run-simple-swift -Xfrontend -disable-access-control
 // REQUIRES: executable_test
+
+//import Swift
 
 extension _UTF16StringStorage {
   var characters: _UnicodeViews<_UTF16StringStorage, UTF16>.CharacterView {
@@ -26,13 +28,43 @@ extension _Latin1StringStorage {
 
 import StdlibUnittest
 
-struct UnicodeIndex : Comparable {
-  var offset: Int64
-  static func == (l: UnicodeIndex, r: UnicodeIndex) -> Bool {
-    return l.offset == r.offset
+protocol AnyUnicodeIndex_ {
+  var codeUnitOffset: Int64 { get }
+}
+
+func == <T: AnyUnicodeIndex_>(l: T, r: T) -> Bool {
+  return l.codeUnitOffset == r.codeUnitOffset
+}
+
+func < <T: AnyUnicodeIndex_>(l: T, r: T) -> Bool {
+  return l.codeUnitOffset < r.codeUnitOffset
+}
+
+// FIXME: Not sure if we want to expose the existential versions of these
+func ==(l: AnyUnicodeIndex_, r: AnyUnicodeIndex_) -> Bool {
+  return l.codeUnitOffset == r.codeUnitOffset
+}
+
+func < (l: AnyUnicodeIndex_, r: AnyUnicodeIndex_) -> Bool {
+  return l.codeUnitOffset < r.codeUnitOffset
+}
+
+struct UnicodeIndex : Comparable, AnyUnicodeIndex_ {
+  var codeUnitOffset: Int64 { return base.codeUnitOffset }
+  
+  var base: AnyUnicodeIndex_
+  init<Base: AnyUnicodeIndex_>(_ base: Base) {
+    self.base = base
   }
-  static func < (l: UnicodeIndex, r: UnicodeIndex) -> Bool {
-    return l.offset < r.offset
+}
+
+struct SimpleUnicodeIndex : Comparable, AnyUnicodeIndex_ {
+  var codeUnitOffset: Int64
+  static func == (l: SimpleUnicodeIndex, r: SimpleUnicodeIndex) -> Bool {
+    return l.codeUnitOffset == r.codeUnitOffset
+  }
+  static func < (l: SimpleUnicodeIndex, r: SimpleUnicodeIndex) -> Bool {
+    return l.codeUnitOffset < r.codeUnitOffset
   }
 }
 
@@ -98,20 +130,15 @@ extension AnyCodeUnits.ZeroExtender : RandomAccessCollection, AnyCodeUnits_ {
   var endIndex: Index { return numericCast(base.count) }
   
   func index(after i: Index) -> Index {
-    return numericCast(
-      base.offset(of: base.index(after: base.index(atOffset: i))))
+    return i + 1
   }
   
   func index(before i: Index) -> Index {
-    return numericCast(
-      base.offset(of: base.index(before: base.index(atOffset: i))))
+    return i - 1
   }
   
   func index(_ i: Index, offsetBy n: Int64) -> Index {
-    return numericCast(
-      base.offset(
-        of: base.index(base.index(atOffset: i),
-          offsetBy: numericCast(n))))
+    return i + n
   }
   
   subscript(i: Index) -> Element {
@@ -127,30 +154,88 @@ extension AnyCodeUnits.ZeroExtender : RandomAccessCollection, AnyCodeUnits_ {
   }
 }
 
-protocol AnyUTF16_ {
-  typealias IndexDistance = Int64
-  typealias Index = UnicodeIndex
+protocol AnyUnicodeView_ {
+  var startIndex: UnicodeIndex { get }
+  var endIndex: UnicodeIndex { get }
+  func index(after: UnicodeIndex) -> UnicodeIndex
+  func index(before: UnicodeIndex) -> UnicodeIndex
+  func index(_ i: UnicodeIndex, offsetBy: Int64) -> UnicodeIndex
+  func distance(from i: UnicodeIndex, to j: UnicodeIndex) -> Int64
+}
+
+protocol UnicodeView : AnyUnicodeView_, BidirectionalCollection {
+  
+}
+
+protocol AnyUnicodeViewAdapter : AnyUnicodeView_ {
+  var anyBase: AnyUnicodeView_ { get }
+}
+
+extension AnyUnicodeViewAdapter {
+  var startIndex: UnicodeIndex { return anyBase.startIndex }
+  var endIndex: UnicodeIndex { return anyBase.endIndex }
+  func index(after i: UnicodeIndex) -> UnicodeIndex { return anyBase.index(after: i) }
+  func index(before i: UnicodeIndex) -> UnicodeIndex { return anyBase.index(before: i) }
+  func index(_ i: UnicodeIndex, offsetBy n: Int64) -> UnicodeIndex {
+    return anyBase.index(i, offsetBy: n)
+  }
+  func distance(from i: UnicodeIndex, to j: UnicodeIndex) -> Int64 {
+    return anyBase.distance(from: i, to: j)
+  }
+}
+
+/*
+protocol UnicodeViewAdapter {
+  associatedtype Base : BidirectionalCollection
+  func codeUnitOffset(of: Base.Index)
+  func baseIndex(atCodeUnitOffset: Int)
+  
+  var base: Base { get }
+}
+
+extension UnicodeViewAdapter {
+  // Provide the requirement for AnyUnicodeViewAdapter
+  var anyBase: AnyUnicodeView_ { return self.base }
+}
+
+extension UnicodeViewAdapter {
+  var startIndex: UnicodeIndex { return base.startIndex }
+  var endIndex: UnicodeIndex { return base.endIndex }
+  func index(after i: UnicodeIndex) -> UnicodeIndex { return base.index(after: i) }
+  func index(before i: UnicodeIndex) -> UnicodeIndex { return base.index(before: i) }
+  func index(_ i: UnicodeIndex, offsetBy n: Int64) -> UnicodeIndex {
+    return base.index(i, offsetBy: n)
+  }
+  func distance(from i: UnicodeIndex, to j: UnicodeIndex) -> Int64 {
+    return base.distance(from: i, to: j)
+  }
+}
+*/
+
+protocol AnyUTF16_ : AnyUnicodeView_ {
   typealias Element = UInt16
-  var startIndex: Index { get }
-  var endIndex: Index { get }
-  func index(after: Index) -> Index
-  func index(before: Index) -> Index
-  subscript(i: Index) -> Element { get }
+  subscript(i: UnicodeIndex) -> Element { get }
 
   func withExistingUnsafeBuffer<R>(
     _ body: (UnsafeBufferPointer<Element>) throws -> R
   ) rethrows -> R?
 }
 
-struct AnyUTF16 : BidirectionalCollection, AnyUTF16_ {
+/*
+extension _UnicodeViews.TranscodedView.Index : _AnyUnicodeIndex {
+  var codeUnitOffset: Int64 {
+    return numericCast(self.base)
+  }
+}
+*/
+
+struct AnyUTF16 : UnicodeView, AnyUnicodeViewAdapter {
   let base: AnyUTF16_
-  typealias IndexDistance = Int64
-  typealias Index = UnicodeIndex
+  internal var anyBase: AnyUnicodeView_ { return base }
+  
   typealias Element = UInt16
-  var startIndex: Index { return base.startIndex }
-  var endIndex: Index { return base.endIndex }
-  func index(after i: Index) -> Index { return base.index(after: i) }
-  func index(before i: Index) -> Index { return base.index(before: i) }
+  typealias Index = UnicodeIndex
+  typealias IndexDistance = Int64
   subscript(i: Index) -> Element { return base[i] }
   public func withExistingUnsafeBuffer<R>(
     _ body: (UnsafeBufferPointer<Element>) throws -> R
@@ -158,46 +243,72 @@ struct AnyUTF16 : BidirectionalCollection, AnyUTF16_ {
     return try base.withExistingUnsafeBuffer(body)
   }
 
-  init<C: BidirectionalCollection>(_ c: C)
-  where C.Iterator.Element : UnsignedInteger {
-    base = ZeroExtender(base: c)
+  init<Base: RandomAccessCollection>(_ base: Base)
+  where Base.Iterator.Element : UnsignedInteger {
+    self.base = ZeroExtender(base: base)
   }
 
   struct ZeroExtender<
-    Base: BidirectionalCollection
+    Base: RandomAccessCollection
   > where Base.Iterator.Element : UnsignedInteger {
     let base: Base
   }
+
+  init<CodeUnits: RandomAccessCollection, Encoding: UnicodeEncoding>(
+    transcoding base: CodeUnits, from e: Encoding
+  )
+  where Encoding.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element,
+  CodeUnits.SubSequence : RandomAccessCollection,
+  CodeUnits.SubSequence.Index == CodeUnits.Index,
+  CodeUnits.SubSequence.SubSequence == CodeUnits.SubSequence,
+  CodeUnits.SubSequence.Iterator.Element == CodeUnits.Iterator.Element {
+    self.base = Transcoder<CodeUnits, Encoding>(codeUnits: base)
+  }
+
+  struct Transcoder<CodeUnits: RandomAccessCollection, Encoding: UnicodeEncoding>
+  where Encoding.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element,
+  CodeUnits.SubSequence : RandomAccessCollection,
+  CodeUnits.SubSequence.Index == CodeUnits.Index,
+  CodeUnits.SubSequence.SubSequence == CodeUnits.SubSequence,
+  CodeUnits.SubSequence.Iterator.Element == CodeUnits.Iterator.Element {
+    typealias BaseView = _UnicodeViews<
+      CodeUnits.SubSequence, Encoding
+    >.TranscodedView<UTF16>
+
+    let base: BaseView
+  }
 }
 
-/// Adapts any bidirectional collection of unsigned integer to AnyUTF16_
-extension AnyUTF16.ZeroExtender : BidirectionalCollection, AnyUTF16_ {
-  typealias IndexDistance = Int64
+/// Adapts any random access collection of unsigned integer to AnyUTF16_
+extension AnyUTF16.ZeroExtender : AnyUTF16_ {
   typealias Index = UnicodeIndex
-  typealias Element = UInt16
   
-  var startIndex: Index { return Index(offset: 0) }
-  var endIndex: Index { return Index(offset: numericCast(base.count)) }
-  
-  func index(after i: Index) -> Index {
-    return Index(offset: numericCast(
-        base.offset(of: base.index(after: base.index(atOffset: i.offset)))))
+  var startIndex: Index {
+    return Index(SimpleUnicodeIndex(codeUnitOffset: 0))
   }
   
-  func index(before i: Index) -> Index {
-    return Index(offset: numericCast(
-        base.offset(of: base.index(before: base.index(atOffset: i.offset)))))
-  }
-  
-  func index(_ i: Index, offsetBy n: Int64) -> Index {
-    return Index(offset: numericCast(
-      base.offset(
-        of: base.index(base.index(atOffset: i.offset),
-            offsetBy: numericCast(n)))))
+  var endIndex: Index {
+    return Index(SimpleUnicodeIndex(codeUnitOffset: numericCast(base.count)))
   }
   
   subscript(i: Index) -> Element {
-    return numericCast(base[base.index(atOffset: i.offset)])
+    return numericCast(base[base.index(atOffset: i.codeUnitOffset)])
+  }
+
+  func index(after i: Index) -> Index {
+    return Index(SimpleUnicodeIndex(codeUnitOffset: i.codeUnitOffset + 1))
+  }
+  
+  func index(before i: UnicodeIndex) -> UnicodeIndex {
+    return Index(SimpleUnicodeIndex(codeUnitOffset: i.codeUnitOffset - 1))
+  }
+  
+  func index(_ i: UnicodeIndex, offsetBy n: Int64) -> UnicodeIndex {
+    return Index(SimpleUnicodeIndex(codeUnitOffset: i.codeUnitOffset + n))
+  }
+  
+  func distance(from i: UnicodeIndex, to j: UnicodeIndex) -> Int64 {
+    return j.codeUnitOffset - i.codeUnitOffset
   }
 
   public func withExistingUnsafeBuffer<R>(
@@ -209,10 +320,142 @@ extension AnyUTF16.ZeroExtender : BidirectionalCollection, AnyUTF16_ {
   }
 }
 
-protocol AnyUnicodeScalars_ {
-  typealias IndexDistance = Int64
+extension _UnicodeViews.TranscodedView {
+  func index(atCodeUnitOffset offset: Int64) -> Index {
+    let codeUnits = base._base._base.codeUnits
+    let start: CodeUnits.Index = codeUnits.index(atOffset: offset)
+    let rest = TranscodedView(underlyingCodeUnits: codeUnits[start...])
+    return rest.startIndex
+  }
+}
+
+extension AnyUTF16.Transcoder : AnyUTF16_ {
+
+  init(codeUnits: CodeUnits) {
+    base = _UnicodeViews(
+      codeUnits[...], Encoding.self
+    ).transcoded(to: UTF16.self)
+  }
+  
+  struct IndexImpl : AnyUnicodeIndex_, Comparable {
+    init(_ base: BaseView.Index) { self.base = base }
+    var codeUnitOffset : Int64 { return numericCast(base._outer.base) }
+    let base: BaseView.Index
+  }
+  
   typealias Index = UnicodeIndex
+  
+  var startIndex: Index {
+    return _index(base.startIndex)
+  }
+  
+  var endIndex: Index {
+    return _index(base.endIndex)
+  }
+
+  internal func _index(_ i: BaseView.Index) -> Index {
+    return Index(IndexImpl(i))
+  }
+  
+  internal func _unwrap(_ i: Index) -> BaseView.Index {
+    if let j = i.base as? IndexImpl {
+      return j.base
+    }
+    return base.index(atCodeUnitOffset: i.codeUnitOffset)
+  }
+  
+  subscript(i: Index) -> Element {
+    return base[_unwrap(i)]
+  }
+
+  func index(after i: Index) -> Index {
+    return _index(base.index(after: _unwrap(i)))
+  }
+  
+  func index(before i: UnicodeIndex) -> UnicodeIndex {
+    return _index(base.index(before: _unwrap(i)))
+  }
+  
+  func index(_ i: UnicodeIndex, offsetBy n: Int64) -> UnicodeIndex {
+    return _index(base.index(before: _unwrap(i), offsetBy: numericCast(n)))
+  }
+  
+  func distance(from i: UnicodeIndex, to j: UnicodeIndex) -> Int64 {
+    return numericCast(base.distance(from: _unwrap(i), to: _unwrap(j)))
+  }
+
+  public func withExistingUnsafeBuffer<R>(
+    _ body: (UnsafeBufferPointer<Element>) throws -> R
+  ) rethrows -> R? {
+    return try base.withExistingUnsafeBuffer {
+      try ($0 as Any as? UnsafeBufferPointer<Element>).map(body)
+    }.flatMap { $0 }
+  }
+}
+
+/*
+protocol AnyUnicodeScalars_ : AnyUnicodeView_ {
   typealias Element = UnicodeScalar
+  subscript(i: UnicodeIndex) -> Element { get }
+
+  func withExistingUnsafeBuffer<R>(
+    _ body: (UnsafeBufferPointer<Element>) throws -> R
+  ) rethrows -> R?
+}
+
+struct AnyUnicodeScalars : UnicodeView, AnyUnicodeViewAdapter {
+  let base: AnyUnicodeScalars_
+  internal var anyBase: AnyUnicodeView_ { return base }
+  
+  typealias Element = UnicodeScalar
+  typealias Index = UnicodeIndex
+  typealias IndexDistance = Int64
+  
+  subscript(i: Index) -> Element { return base[i] }
+  public func withExistingUnsafeBuffer<R>(
+    _ body: (UnsafeBufferPointer<Element>) throws -> R
+  ) rethrows -> R? {
+    return try base.withExistingUnsafeBuffer(body)
+  }
+
+  init<C: UnicodeView & AnyUnicodeScalars_>(_ c: C)
+  where C.Iterator.Element : UnsignedInteger {
+    base = Adapter(base: c)
+  }
+
+  struct Adapter<
+    Base: UnicodeView & AnyUnicodeScalars_
+  > where Base.Iterator.Element : UnsignedInteger {
+    let base: Base
+  }
+}
+
+/// Adapts any bidirectional collection of unsigned integer to AnyUnicodeScalars_
+extension AnyUnicodeScalars.Adapter : UnicodeViewAdapter, AnyUnicodeScalars_ {
+  typealias Index = UnicodeIndex
+
+  var endIndex: Index { return base.endIndex }
+  var startIndex: Index { return base.startIndex }
+  
+  subscript(i: Index) -> UnicodeScalar {
+    return base[i]
+  }
+
+  public func withExistingUnsafeBuffer<R>(
+    _ body: (UnsafeBufferPointer<Element>) throws -> R
+  ) rethrows -> R? {
+    return try base.withExistingUnsafeBuffer {
+      try ($0 as Any as? UnsafeBufferPointer<Element>).map(body)
+    }.flatMap { $0 }
+  }
+}
+*/
+
+/*
+protocol AnyUnicodeScalars_ : AnyUnicodeView_ {
+  typealias Element = UnicodeScalar
+  typealias IndexDistance = Int64
+  typealias Index = SimpleUnicodeIndex
   var startIndex: Index { get }
   var endIndex: Index { get }
   func index(after: Index) -> Index
@@ -224,7 +467,7 @@ protocol AnyUnicodeScalars_ {
   ) rethrows -> R?
 }
 
-struct AnyUnicodeScalars : BidirectionalCollection, AnyUnicodeScalars_ {
+struct AnyUnicodeScalars : UnicodeView, AnyUnicodeScalars_ {
   let base: AnyUnicodeScalars_
   typealias IndexDistance = Int64
   typealias Index = UnicodeIndex
@@ -258,11 +501,11 @@ extension AnyUnicodeScalars.Adapter
   : BidirectionalCollection, AnyUnicodeScalars_ 
 {
   typealias IndexDistance = Int64
-  typealias Index = UnicodeIndex
+  typealias Index = SimpleUnicodeIndex
   typealias Element = AnyUnicodeScalars_.Element
   
   var startIndex: Index { return Index(offset: 0) }
-  var endIndex: Index { return Index(offset: numericCast(base.count)) }
+  var endIndex: Index { return Index(offset: numericCast(base.count)^) }
   
   func index(after i: Index) -> Index {
     return Index(offset: numericCast(
@@ -278,7 +521,7 @@ extension AnyUnicodeScalars.Adapter
     return Index(offset: numericCast(
       base.offset(
         of: base.index(base.index(atOffset: i.offset),
-            offsetBy: numericCast(n)))))
+            offsetBy: n^))))
   }
   
   subscript(i: Index) -> Element {
@@ -294,117 +537,9 @@ extension AnyUnicodeScalars.Adapter
   }
 }
 
-protocol AnyRandomAccessUTF16_ : AnyUTF16_ {
-  typealias IndexDistance = Int64
-  typealias Index = UnicodeIndex
-  typealias Element = UInt16
-  var startIndex: Index { get }
-  var endIndex: Index { get }
-  func index(after: Index) -> Index
-  func index(before: Index) -> Index
-  func index(_: Index, offsetBy: IndexDistance) -> Index
-  func distance(from: Index, to: Index) -> IndexDistance
-  
-  subscript(i: Index) -> Element { get }
-
-  func withExistingUnsafeBuffer<R>(
-    _ body: (UnsafeBufferPointer<Element>) throws -> R
-  ) rethrows -> R?
-}
-
-// A wrapper that holds any instance of AnyRandomAccessUTF16_ and makes it conform to
-// RandomAccessCollection
-struct AnyRandomAccessUTF16 : RandomAccessCollection, AnyRandomAccessUTF16_ {
-  let base: AnyRandomAccessUTF16_
-  typealias IndexDistance = Int64
-  typealias Index = UnicodeIndex
-  typealias Element = UInt16
-  var startIndex: Index { return base.startIndex }
-  var endIndex: Index { return base.endIndex }
-  func index(after i: Index) -> Index { return base.index(after: i) }
-  func index(before i: Index) -> Index { return base.index(before: i) }
-  func index(_ i: Index, offsetBy n: IndexDistance) -> Index {
-    return base.index(i, offsetBy: n)
-  }
-  func distance(from i: Index, to j: Index) -> IndexDistance {
-    return base.distance(from: i, to: j)
-  }
-  subscript(i: Index) -> Element { return base[i] }
-  public func withExistingUnsafeBuffer<R>(
-    _ body: (UnsafeBufferPointer<Element>) throws -> R
-  ) rethrows -> R? {
-    return try base.withExistingUnsafeBuffer(body)
-  }
-
-  init<C: RandomAccessCollection>(_ c: C)
-  where C.Iterator.Element : UnsignedInteger {
-    base = ZeroExtender(base: c)
-  }
-
-  struct ZeroExtender<
-    Base: RandomAccessCollection
-  > where Base.Iterator.Element : UnsignedInteger {
-    let base: Base
-  }
-}
-
-/// Adapts any random access collection of unsigned integer to
-/// AnyRandomAccessUTF16_, so it can be wrapped in AnyRandomAccessUTF16
-extension AnyRandomAccessUTF16.ZeroExtender
-: RandomAccessCollection, AnyRandomAccessUTF16_ {
-  typealias IndexDistance = Int64
-  typealias Index = UnicodeIndex
-  typealias Element = UInt16
-  
-
-  var startIndex: Index { return Index(offset: 0) }
-  var endIndex: Index { return Index(offset: numericCast(base.count)) }
-  
-  func index(after i: Index) -> Index {
-    return Index(
-      offset: numericCast(
-        base.offset(of: base.index(after: base.index(atOffset: i.offset)))))
-  }
-  
-  func index(before i: Index) -> Index {
-    return Index(
-      offset: numericCast(
-        base.offset(
-          of: base.index(before: base.index(atOffset: i.offset)))))
-  }
-  
-  func index(_ i: Index, offsetBy n: Int64) -> Index {
-    return Index(
-      offset: numericCast(
-        base.offset(
-          of: base.index(
-            base.index(atOffset: i.offset),
-            offsetBy: numericCast(n)))))
-  }
-  
-  func distance(from i: Index, to j: Index) -> IndexDistance {
-    return numericCast(
-      base.distance(
-        from: base.index(atOffset: i.offset),
-        to: base.index(atOffset: j.offset)))
-  }
-  
-  subscript(i: Index) -> Element {
-    return numericCast(base[base.index(atOffset: i.offset)])
-  }
-
-  public func withExistingUnsafeBuffer<R>(
-    _ body: (UnsafeBufferPointer<Element>) throws -> R
-  ) rethrows -> R? {
-    return try base.withExistingUnsafeBuffer {
-      try ($0 as Any as? UnsafeBufferPointer<Element>).map(body)
-    }.flatMap { $0 }
-  }
-}
-
 protocol AnyUnicodeBidirectionalUInt32_ {
   typealias IndexDistance = Int64
-  typealias Index = UnicodeIndex
+  typealias Index = SimpleUnicodeIndex
   typealias Element = UInt32
   var startIndex: Index { get }
   var endIndex: Index { get }
@@ -421,7 +556,7 @@ protocol AnyUnicodeBidirectionalUInt32_ {
 struct AnyUnicodeBidirectionalUInt32 : BidirectionalCollection, AnyUnicodeBidirectionalUInt32_ {
   let base: AnyUnicodeBidirectionalUInt32_
   typealias IndexDistance = Int64
-  typealias Index = UnicodeIndex
+  typealias Index = SimpleUnicodeIndex
   typealias Element = UInt32
   var startIndex: Index { return base.startIndex }
   var endIndex: Index { return base.endIndex }
@@ -452,12 +587,12 @@ struct AnyUnicodeBidirectionalUInt32 : BidirectionalCollection, AnyUnicodeBidire
 extension AnyUnicodeBidirectionalUInt32.ZeroExtender
   : BidirectionalCollection, AnyUnicodeBidirectionalUInt32_ {
   typealias IndexDistance = Int64
-  typealias Index = UnicodeIndex
+  typealias Index = SimpleUnicodeIndex
   typealias Element = UInt32
   
 
   var startIndex: Index { return Index(offset: 0) }
-  var endIndex: Index { return Index(offset: numericCast(base.count)) }
+  var endIndex: Index { return Index(offset: base.count^) }
   
   func index(after i: Index) -> Index {
     return Index(offset: numericCast(
@@ -473,7 +608,7 @@ extension AnyUnicodeBidirectionalUInt32.ZeroExtender
     return Index(offset: numericCast(
       base.offset(
         of: base.index(base.index(atOffset: i.offset),
-            offsetBy: numericCast(n)))))
+            offsetBy: n^))))
   }
   
   subscript(i: Index) -> Element {
@@ -491,7 +626,7 @@ extension AnyUnicodeBidirectionalUInt32.ZeroExtender
 
 protocol AnyCharacters_ {
   typealias IndexDistance = Int64
-  typealias Index = UnicodeIndex
+  typealias Index = SimpleUnicodeIndex
   typealias Element = Character
   var startIndex: Index { get }
   var endIndex: Index { get }
@@ -507,7 +642,7 @@ protocol AnyCharacters_ {
 struct AnyCharacters : BidirectionalCollection, AnyCharacters_ {
   let base: AnyCharacters_
   typealias IndexDistance = Int64
-  typealias Index = UnicodeIndex
+  typealias Index = SimpleUnicodeIndex
   typealias Element = Character
   var startIndex: Index { return base.startIndex }
   var endIndex: Index { return base.endIndex }
@@ -539,28 +674,28 @@ struct AnyCharacters : BidirectionalCollection, AnyCharacters_ {
 
 extension AnyCharacters.Adapter : AnyCharacters_, BidirectionalCollection {
   typealias IndexDistance = Int64
-  typealias Index = UnicodeIndex
+  typealias Index = SimpleUnicodeIndex
   typealias Element = Character
 
-  var startIndex: Index { return Index(offset: numericCast(base.startIndex)) }
-  var endIndex: Index { return Index(offset: numericCast(base.endIndex)) }
+  var startIndex: Index { return Index(offset: base.startIndex^) }
+  var endIndex: Index { return Index(offset: base.endIndex^) }
   
   func index(after i: Index) -> Index {
-    return Index(offset: numericCast(base.index(after: numericCast(i.offset))))
+    return Index(offset: numericCast(base.index(after: i.offset^)))
   }
   
   func index(before i: Index) -> Index {
-    return Index(offset: numericCast(base.index(before: numericCast(i.offset))))
+    return Index(offset: numericCast(base.index(before: i.offset^)))
   }
   
   func index(_ i: Index, offsetBy n: Int64) -> Index {
     return Index(
       offset: numericCast(
-        base.index(numericCast(i.offset), offsetBy: numericCast(n))))
+        base.index(i.offset^, offsetBy: n^)))
   }
   
   subscript(i: Index) -> Element {
-    return base[numericCast(i.offset)]
+    return base[i.offset^]
   }
 
   func withExistingUnsafeBuffer<R>(
@@ -651,6 +786,7 @@ Self.CharacterView.Index : SignedInteger
   }
 }
 
+/*
 struct AnyRandomAccessUnsignedIntegers<
   Base: RandomAccessCollection, Element_ : UnsignedInteger
 > : RandomAccessCollection
@@ -664,7 +800,7 @@ where Base.Iterator.Element : UnsignedInteger {
   let base: Base
 
   var startIndex: Index { return 0 }
-  var endIndex: Index { return numericCast(base.count) }
+  var endIndex: Index { return base.count^ }
   
   func index(after i: Index) -> Index {
     return numericCast(
@@ -680,7 +816,7 @@ where Base.Iterator.Element : UnsignedInteger {
     return numericCast(
       base.offset(
         of: base.index(base.index(atOffset: i),
-          offsetBy: numericCast(n))))
+          offsetBy: n^)))
   }
   
   subscript(i: Index) -> Element {
@@ -1086,3 +1222,5 @@ suite.test("AnyStringContents") {
   }
 }
 runAllTests()
+*/
+*/
