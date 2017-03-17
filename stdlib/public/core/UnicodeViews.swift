@@ -88,15 +88,18 @@ extension _UnicodeViews.EncodedScalars {
   // the buffer contained more than a single scalar (and it probably
   // should).
   public struct Index : Comparable {
-    let base: CodeUnits.Index
-    // FIXME: We might get a much better memory footprint if we used a
-    // UInt8 to store the distance between base and next, rather than
-    // storing next explicitly.  CodeUnits will be random-access in
-    // practice.
-    let next: CodeUnits.Index
-    // FIXME: there should be an invalid inhabitant we can use in
-    // EncodedScalar so as not to waste a separate bool here.
+    init(
+      base: CodeUnits.IndexDistance,
+      count: UInt8,
+      scalar: Encoding.EncodedScalar?
+    ) {
+      self.base = base
+      self.count = count
+      self.scalar = scalar
+    }
+    let base: CodeUnits.IndexDistance
     let scalar: Encoding.EncodedScalar?
+    let count: UInt8
 
     public static func < (lhs: Index, rhs: Index) -> Bool {
       return lhs.base < rhs.base
@@ -111,13 +114,12 @@ extension _UnicodeViews.EncodedScalars {
 extension _UnicodeViews.EncodedScalars : BidirectionalCollection {
   public var startIndex: Index {
     if _slowPath(codeUnits.isEmpty) { return endIndex }
-    let s = codeUnits.startIndex
-    return index(after: Index(base: s, next: s, scalar: nil))
+    return index(after: Index(base: 0, count: 0, scalar: nil))
   }
   
   public var endIndex: Index {
     let s = codeUnits.endIndex
-    return Index(base: s, next: s, scalar: nil)
+    return Index(base: codeUnits.count, count: 0, scalar: nil)
   }
   
   public subscript(i: Index) -> Encoding.EncodedScalar {
@@ -125,27 +127,30 @@ extension _UnicodeViews.EncodedScalars : BidirectionalCollection {
       return r
     }
     return index(after:
-      Index(base: i.base, next: i.base, scalar: nil)).scalar!
+      Index(base: i.base, count: 0, scalar: nil)).scalar!
   }
 
   public func index(after i: Index) -> Index {
-    var remainder = codeUnits[i.next..<codeUnits.endIndex]
+    let startOffset = i.base + i.count^
+    let start = codeUnits.index(atOffset: startOffset)
+    var remainder = codeUnits[start...]
+    
     while true {
       switch Encoding.parse1Forward(remainder, knownCount: 0) {
-      case .valid(let scalar, let nextIndex):
-        return Index(base:i.next, next: nextIndex, scalar: scalar)
-      case .error(let nextIndex):
-        // FIXME: don't go through UnicodeScalar once this is in the stdlib
-        if let replacement = Encoding.encode(
-          UTF32.EncodedScalar(UnicodeScalar(0xFFFD)!)) {
-          return Index(
-            base:i.next, next: nextIndex,
-            scalar: replacement)
+        
+      case .valid(let parsed, let next):
+        let count = codeUnits.distance(from: start, to: next)
+        return Index(base: startOffset, count: count^, scalar: parsed)
+        
+      case .error(let next):
+        if let r = Encoding.EncodedScalar(UnicodeScalar.replacementCharacter) {
+          let count = codeUnits.distance(from: start, to: next)
+          return Index(base: startOffset, count: count^, scalar: r)
         }
-        // If we get here, the encoding couldn't represent a replacement
-        // character, so the best we can do is to drop that scalar on the floor
-        // and keep going.
-        remainder = codeUnits[nextIndex...]
+          // the encoding couldn't represent a replacement character, so the
+          // best we can do is to drop that scalar on the floor and keep going.
+          remainder = codeUnits[next...]
+        
       case .emptyInput:
         return endIndex
       }
@@ -153,23 +158,26 @@ extension _UnicodeViews.EncodedScalars : BidirectionalCollection {
   }
 
   public func index(before i: Index) -> Index {
-    var remainder = codeUnits[..<i.base]
+    let end = codeUnits.index(atOffset: i.base)
+    var remainder = codeUnits[..<end]
     while true {
       switch Encoding.parse1Reverse(remainder, knownCount: 0) {
-      case .valid(let scalar, let priorIndex):
-        return Index(base: priorIndex, next: i.base, scalar: scalar)
-      case .error(let priorIndex):
-        // FIXME: don't go through UnicodeScalar once this is in the stdlib
-        if let replacement = Encoding.encode(
-          UTF32.EncodedScalar(UnicodeScalar(0xFFFD)!)) {
+        
+      case .valid(let parsed, let prior):
+        let count = codeUnits.distance(from: prior, to: end)
+        return Index(
+          base: codeUnits.offset(of: prior), count: count^, scalar: parsed)
+
+      case .error(let prior):
+        if let r = Encoding.EncodedScalar(UnicodeScalar.replacementCharacter) {
+          let count = codeUnits.distance(from: prior, to: end)
           return Index(
-            base: priorIndex, next: i.base, 
-            scalar: replacement)        
+            base: codeUnits.offset(of: prior), count: count^, scalar: r)
         }
-        // If we get here, the encoding couldn't represent a replacement
-        // character, so the best we can do is to drop that scalar on the floor
-        // and keep going.
-        remainder = codeUnits[..<priorIndex]
+        // the encoding couldn't represent a replacement character, so the
+        // best we can do is to drop that scalar on the floor and keep going.
+        remainder = codeUnits[..<prior]
+        
       case .emptyInput:
         fatalError("Indexing past start of code units")
       }
@@ -324,7 +332,7 @@ extension _UnicodeViews : _UTextable {
             buffer[u.chunkLength^] = unit
             u.chunkLength += 1
           }
-          u.chunkNativeLimit = codeUnits.offset(of: i.next)^
+          u.chunkNativeLimit = (i.base + i.count^)^
         }
       }
       else {
@@ -342,7 +350,7 @@ extension _UnicodeViews : _UTextable {
             buffer[u.chunkLength^] = unit
             u.chunkLength += 1
           }
-          u.chunkNativeStart = codeUnits.offset(of: i.base)^
+          u.chunkNativeStart = i.base^
           u.chunkOffset = u.chunkLength
         }
         // Reverse the buffer contents to get everything in the right order.
@@ -409,7 +417,7 @@ extension _UnicodeViews : _UTextable {
     for i in chunkSource.indices {
       chunkOffset += chunkSource[i].utf16.count
       if chunkOffset == u[0].chunkOffset^ {
-        return codeUnits.offset(of: i.next)^
+        return (i.base + i.count^)^
       }
     }
     fatalError("supposed to be unreachable")
