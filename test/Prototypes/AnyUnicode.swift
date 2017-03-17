@@ -363,8 +363,14 @@ extension AnyUTF16 {
   CodeUnits.SubSequence.Index == CodeUnits.Index,
   CodeUnits.SubSequence.SubSequence == CodeUnits.SubSequence,
   CodeUnits.SubSequence.Iterator.Element == CodeUnits.Iterator.Element {
-    self.base = Eraser(
-      _UnicodeViews(codeUnits[...], Encoding.self).transcoded(to: UTF16.self))
+    typealias Base0 = _UnicodeViews<CodeUnits.SubSequence,Encoding>.TranscodedView<UTF16>
+    let base0: Base0 = _UnicodeViews(codeUnits[...], Encoding.self).transcoded(to: UTF16.self)
+    self.init(base0)
+    /*
+    self.base = AnyUTF16.Eraser<Base0>(base0)
+      // _UnicodeViews<CodeUnits.SubSequence,Encoding>.TranscodedView<UTF16>(codeUnits[...]))
+      //_UnicodeViews(codeUnits[...], Encoding.self).transcoded(to: UTF16.self))
+*/
   }
 }
 
