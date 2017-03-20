@@ -137,10 +137,10 @@ public protocol _CollectionWrapper : _SequenceWrapper, Collection {
   // TODO: Segments is not fully realized yet; we need to make it Bidirectional
   // when the Collection is, etc.  We also need a way to synthesize higher-level
   // indices from segment indices.
-  associatedtype Segments : Collection = Base.Segments
+  associatedtype Segments /*: Collection*/ = Base.Segments
 #endif
-  associatedtype SubSequence : Collection = Base.SubSequence
-  associatedtype Indices : Collection = Base.Indices
+  associatedtype SubSequence /*: Collection*/ = Base.SubSequence
+  associatedtype Indices /*: Collection*/ = Base.Indices
   var _base : Base { get }
 }
 
@@ -326,8 +326,8 @@ public protocol _BidirectionalCollectionWrapper
   // limitations prevent BidirectionalCollection from stating them fully
   associatedtype Base : BidirectionalCollection
 //  associatedtype Segments : BidirectionalCollection = Base.Segments
-  associatedtype SubSequence : BidirectionalCollection = Base.SubSequence
-  associatedtype Indices : BidirectionalCollection = Base.Indices
+  associatedtype SubSequence /*: BidirectionalCollection*/ = Base.SubSequence
+  associatedtype Indices /*: BidirectionalCollection*/ = Base.Indices
   var _base : Base { get }
 }
 
@@ -372,8 +372,8 @@ public protocol _RandomAccessCollectionWrapper
   // limitations prevent RandomAccessCollection from stating them fully
   associatedtype Base : RandomAccessCollection
 //  associatedtype Segments : RandomAccessCollection = Base.Segments
-  associatedtype SubSequence : RandomAccessCollection = Base.SubSequence
-  associatedtype Indices : RandomAccessCollection = Base.Indices
+  associatedtype SubSequence /*: RandomAccessCollection*/ = Base.SubSequence
+  associatedtype Indices /*: RandomAccessCollection*/ = Base.Indices
   var _base : Base { get }
 }
 
