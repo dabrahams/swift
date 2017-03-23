@@ -18,11 +18,6 @@
 
 import StdlibUnittest
 
-public protocol UnicodeView : BidirectionalCollection {
-  func _wrap(_: Index) -> AnyUnicodeIndex_
-  func _unwrap(_: AnyUnicodeIndex_) -> Index
-}
-
 //===--- AnyUnicodeIndex --------------------------------------------------===//
 
 /// Type eraser for indices into type-erased unicode views.
@@ -121,38 +116,6 @@ where Base : UnicodeView, Self : AnyUnicodeView_ {
   }
 }
 
-/// An adapter that presents any `RandomAccessCollection` as a `UnicodeView` by
-/// adding a standard model of AnyUnicodeIndex_ and a corresponding pair of
-/// wrap/unwrap functions.
-///
-/// This adapter assumes that if you have a view of unicode that is random
-/// access, there must be one element per code unit.
-public struct
-MappedViewOfUnicodeCodeUnits<Base : RandomAccessCollection>
-: BidirectionalCollectionWrapper, UnicodeView {
-  public var base: Base
-
-  // FIXME: the compiler needs deduction help here, but shouldn't
-  public typealias Index = Base.Index
-  public typealias IndexDistance = Base.IndexDistance
-  
-  public struct AnyIndex : AnyUnicodeIndex_, ForwardingWrapper, Comparable {
-    public var base: Base.Index
-    var encodedPosition_: Base.IndexDistance
-    public var encodedPosition: Int64 {
-      return numericCast(encodedPosition_)
-    }
-  }
-  
-  public func _wrap(_ i: Index) -> AnyUnicodeIndex_ {
-    return AnyIndex(base: i, encodedPosition_: base.offset(of: i))
-  }
-  public func _unwrap(_ i: AnyUnicodeIndex_) -> Index {
-    return (i as? AnyIndex).map { $0.base }
-    ?? base.index(atOffset: i.encodedPosition)
-  }
-}
-
 // Generate wrappers for specific element types.
 % for Element in ('UInt16', 'UInt32', 'UnicodeScalar', 'Character'):
 
@@ -242,11 +205,6 @@ extension Any${Element}UnicodeView {
   where Base.Iterator.Element == ${Element} {
     self.base2 = Adapter(base: base)
   }
-  
-  public init<Base : RandomAccessCollection>(_ base: Base)
-  where Base.Iterator.Element == ${Element} {
-    self.base2 = Adapter(base: MappedViewOfUnicodeCodeUnits(base: base))
-  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -254,7 +212,7 @@ extension Any${Element}UnicodeView {
 % end
 
 //===--- Adapt Swift.UnicodeView to this file's UnicodeView protocol ------===//
-struct AnyUnicodeIndexAdapter<BaseView: Swift.UnicodeView>
+struct AnyUnicodeIndexAdapter<BaseView: UnicodeView>
 : AnyUnicodeIndex_, ForwardingWrapper, Comparable {
   var base: BaseView.Index
   var encodedPosition: Int64 {
@@ -262,9 +220,7 @@ struct AnyUnicodeIndexAdapter<BaseView: Swift.UnicodeView>
   }
 }
 
-extension Swift.UnicodeView where Self : UnicodeView {
-  typealias Self_ = Self
-  
+extension UnicodeView {
   public func _wrap(_ i: Index) -> AnyUnicodeIndex_ {
     return AnyUnicodeIndexAdapter<Self>(base: i)
   }
@@ -273,21 +229,305 @@ extension Swift.UnicodeView where Self : UnicodeView {
     ?? index(atEncodedPosition: i.encodedPosition)
   }
 }
-//===--- Adapt specific views ---------------------------------------------===//
-extension _UnicodeViews.Scalars : UnicodeView {}
-extension _TranscodedView : UnicodeView {}
 //===----------------------------------------------------------------------===//
 
-public protocol Unicode : _UnicodeContent, RandomAccessCollection
+//===--- Unicode ----------------------------------------------------------===//
+/// Collections of `Character`s derived from `UnicodeContent`.
+public protocol Unicode : _UnicodeContent, BidirectionalCollection
 // where Iterator.Element == Character
 {
   // poor man's constraint on Iterator.Element
   subscript(i: Index) -> Character { get } 
 }
 
+extension _UnicodeContent where UTF16View.Iterator.Element == UTF16.CodeUnit {
+  func isLatin1() -> Bool {
+    return isKnownLatin1 || !utf16.contains { $0 > 0xFF }
+  }
+
+  func isASCII() -> Bool {
+    return isKnownASCII || !utf16.contains { $0 > 0x7f }
+  }
+}
+
+class UnicodeBox : FactoryInitializable {
+  var utf16: AnyUInt16UnicodeView { fatalError("override me!") }
+  var unicodeScalars: AnyUnicodeScalarUnicodeView { fatalError("override me!") }
+#if false
+  var utf32: AnyUInt32UnicodeView { fatalError("override me!") }
+  var fccNormalizedUTF16: AnyUInt16UnicodeView { fatalError("override me!") }
+#endif
+  
+#if false
+  // FIXME: Can this be Random Access?  If all encodings use a single code unit
+  // per ASCII character and can statelessly identify a code unit that
+  // represents ASCII, then yes.  Look into, e.g. shift-JIS.
+  var extendedASCII: UnicodeBidirectionalUInt32 { fatalError("override me!") }
+#endif
+  var characters: AnyCharacterUnicodeView { fatalError("override me!") }
+  var isKnownLatin1: Bool { fatalError("override me!") }
+  var isKnownASCII: Bool { fatalError("override me!") }
+  var isKnownFCCNormalized: Bool { fatalError("override me!") }
+  var isKnownFCDForm: Bool { fatalError("override me!") }
+  var isKnownNFDNormalized: Bool { fatalError("override me!") }
+  var isKnownNFCNormalized: Bool { fatalError("override me!") }
+
+  func isLatin1() -> Bool  { fatalError("override me!") }
+  func isASCII() -> Bool { fatalError("override me!") }
+
+  class Instance<Base: _UnicodeContent> : UnicodeBox
+  where Base.UTF16View.Iterator.Element == UTF16.CodeUnit,
+  Base.UnicodeScalarView.Iterator.Element == UnicodeScalar
+  {
+    var base: Base
+    
+    override var utf16: AnyUInt16UnicodeView {
+      return AnyUInt16UnicodeView(base.utf16)
+    }
+    override var unicodeScalars: AnyUnicodeScalarUnicodeView {
+      return AnyUnicodeScalarUnicodeView(base.unicodeScalars)
+    }
+#if false
+    override var utf32: AnyUInt32UnicodeView {
+      return AnyUInt32UnicodeView(base.utf32)
+    }
+    override var fccNormalizedUTF16: AnyUInt16UnicodeView {
+      return base.fccNormalizedUTF16
+    }
+    override var extendedASCII: UnicodeBidirectionalUInt32 {
+      return base.extendedASCII
+    }
+    override var characters: AnyCharacters { return base.characters }
+#endif
+    override var isKnownLatin1: Bool { return base.isKnownLatin1 }
+    override var isKnownASCII: Bool { return base.isKnownASCII }
+    override var isKnownFCCNormalized: Bool { return base.isKnownFCCNormalized }
+    override var isKnownFCDForm: Bool { return base.isKnownFCDForm }
+    override var isKnownNFDNormalized: Bool { return base.isKnownNFDNormalized }
+    override var isKnownNFCNormalized: Bool { return base.isKnownNFCNormalized }
+    override func isLatin1() -> Bool  { return base.isLatin1() }
+    override func isASCII() -> Bool  { return base.isASCII() }
+    init(_ x: Base) {
+      base = x
+      super.init(fromSubclass: ())
+    }
+  }
+
+  convenience init<Base: Unicode>(wrapping x: Base)
+  where Base.UTF16View.Iterator.Element == UTF16.CodeUnit,
+  Base.UnicodeScalarView.Iterator.Element == UnicodeScalar
+  {
+    self.init(Instance(x))
+  }
+  
+  init(fromSubclass: ()) {}
+}
+
+public struct String {
+  internal enum _Content {
+  case utf16(_UTF16StringStorage)
+  case latin1(_Latin1StringStorage)
+  case any(UnicodeBox)
+  }
+  var _content: _Content
+}
+
+extension String : BidirectionalCollectionWrapper {
+  public typealias Base = AnyCharacterUnicodeView
+  public typealias Index = AnyCharacterUnicodeView.Index
+  public typealias IndexDistance = Int64
+  
+  public var base: Base {
+    switch _content {
+    case .utf16(let storage):
+      return AnyCharacterUnicodeView(storage.characters)
+    case .latin1(let storage):
+      return AnyCharacterUnicodeView(storage.characters)
+    case .any(let base):
+      return base.characters
+    }
+  }
+}
+/*
+  
+
+   : BidirectionalCollectionWrapper, Unicode
+
+}
+
+extension String.Content {
+  var utf16: AnyUInt16UnicodeView {
+    switch self {
+    case .utf16(let storage):
+      return AnyUInt16UnicodeView(storage)
+    case .latin1(let storage):
+      return AnyUInt16UnicodeView(storage)
+    case .any(let base):
+      return base.utf16
+    }
+  }
+
+  var unicodeScalars: AnyUnicodeScalarUnicodeView {
+    switch self {
+    case .utf16(let storage):
+      return UnicodeScalars(storage.unicodeScalars)
+    case .latin1(let storage):
+      return UnicodeScalars(storage.unicodeScalars)
+    case .any(let base):
+      return base.unicodeScalars
+    }
+  }
+
+  var utf32: AnyUInt32UnicodeView {
+    switch self {
+    case .utf16(let storage):
+      return UnicodeBidirectionalUInt32(
+        _UnicodeViews(storage, UTF16.self).transcoded(to: UTF32.self)
+      )
+    case .latin1(let storage):
+      return UnicodeBidirectionalUInt32(storage)
+    case .any(let base):
+      return base.utf32
+    }
+  }
+
+#if false
+  var extendedASCII: UnicodeBidirectionalUInt32 {
+    switch self {
+    case .utf16(let storage):
+      return AnyUnicodeBidirectionalUInt32(storage)
+    case .latin1(let storage):
+      return AnyUnicodeBidirectionalUInt32(storage)
+    case .any(let base):
+      return base.extendedASCII
+    }
+  }
+
+  var characters: AnyCharacters {
+    switch self {
+    case .utf16(let storage):
+      return AnyCharacters(storage.characters)
+    case .latin1(let storage):
+      return AnyCharacters(storage.characters)
+    case .any(let base):
+      return base.characters
+    }
+  }
+
+  var fccNormalizedUTF16: AnyUInt16UnicodeView {
+    switch self {
+    case .utf16(let storage):
+      return storage.fccNormalizedUTF16
+    case .latin1(let storage):
+      return storage.fccNormalizedUTF16
+    case .any(let base):
+      return base.fccNormalizedUTF16
+    }
+  }
+#endif
+
+  var isKnownASCII: Bool {
+    switch self {
+    case .utf16(let storage):
+      return storage.isKnownASCII
+    case .latin1(let storage):
+      return storage.isKnownASCII
+    case .any(let base):
+      return base.isKnownASCII
+    }
+  }
+
+  var isKnownLatin1: Bool {
+    switch self {
+    case .utf16(let storage):
+      return storage.isKnownLatin1
+    case .latin1(let storage):
+      return storage.isKnownLatin1
+    case .any(let base):
+      return base.isKnownLatin1
+    }
+  }
+
+  var isKnownValidEncoding: Bool {
+    switch self {
+    case .utf16(let storage):
+      return storage.isKnownValidEncoding
+    case .latin1(let storage):
+      return storage.isKnownValidEncoding
+    case .any(let base):
+      return base.isKnownValidEncoding
+    }
+  }
+
+  var isKnownFCCNormalized: Bool {
+    switch self {
+    case .utf16(let storage):
+      return storage.isKnownFCCNormalized
+    case .latin1(let storage):
+      return storage.isKnownFCCNormalized
+    case .any(let base):
+      return base.isKnownFCCNormalized
+    }
+  }
+
+  var isKnownFCDForm: Bool {
+    switch self {
+    case .utf16(let storage):
+      return storage.isKnownFCDForm
+    case .latin1(let storage):
+      return storage.isKnownFCDForm
+    case .any(let base):
+      return base.isKnownFCDForm
+    }
+  }
+
+  var isKnownNFDNormalized: Bool {
+    switch self {
+    case .utf16(let storage):
+      return storage.isKnownNFDNormalized
+    case .latin1(let storage):
+      return storage.isKnownNFDNormalized
+    case .any(let base):
+      return base.isKnownNFDNormalized
+    }
+  }
+
+  var isKnownNFCNormalized: Bool {
+    switch self {
+    case .utf16(let storage):
+      return storage.isKnownNFCNormalized
+    case .latin1(let storage):
+      return storage.isKnownNFCNormalized
+    case .any(let base):
+      return base.isKnownNFCNormalized
+    }
+  }
+
+  init<T: _UnicodeContent>(_ x: T) {
+    if let s = x as? _Latin1StringStorage {
+      self = .latin1(s)
+    }
+    else if let s = x as? _UTF16StringStorage {
+      self = .utf16(s)
+    }
+    else {
+      self = .any(AnyUnicodeBox(wrapping: x))
+    }
+  }
+}
+
 //===----------------------------------------------------------------------===//
 //===--- Tests ------------------------------------------------------------===//
 //===----------------------------------------------------------------------===//
+
+print(MemoryLayout<AnyStringContents>.size)
+
+var suite = TestSuite("AnyUnicode")
+suite.test("basics") {
+  let x = AnyUInt16UnicodeView.ZeroExtender(base: Array(3...7) as [UInt16])
+  let y = AnyUInt16UnicodeView.ZeroExtender(base: Array(3...7) as [UInt8])
+  expectTrue(x.elementsEqual(y))
+}
 
 let sample = "abcdefghijklmnopqrstuvwxyz\n"
   + "🇸🇸🇬🇱🇱🇸🇩🇯🇺🇸\n"
@@ -298,8 +538,75 @@ let sample = "abcdefghijklmnopqrstuvwxyz\n"
   + "  ๏ แผ่นดินฮั่นเสื่อมโทรมแสนสังเวช  พระปกเกศกองบู๊กู้ขึ้นใหม่\n"
   + "ᚻᛖ ᚳᚹᚫᚦ ᚦᚫᛏ ᚻᛖ ᛒᚢᛞᛖ ᚩᚾ ᚦᚫᛗ ᛚᚪᚾᛞᛖ ᚾᚩᚱᚦᚹᛖᚪᚱᛞᚢᛗ ᚹᛁᚦ ᚦᚪ ᚹᛖᛥᚫ"
 
+let latin1Sample = String(
+  sample.unicodeScalars.lazy.filter { $0.value < 0x100 }.map {
+    Character($0)
+  })
 
-var suite = TestSuite("AU3")
+suite.test("AnyStringContents/_UTF16StringStorage") {
+
+  let s = AnyStringContents(_UTF16StringStorage(sample.utf16))
+  
+  expectEqual(
+    AnyCodeUnits.ZeroExtender<_UTF16StringStorage>.self,
+    type(of: s.codeUnits.base))
+  expectEqualSequence(sample.utf16.map { numericCast($0) }, s.codeUnits)
+  
+  expectEqual(
+    AnyUInt16UnicodeView.ZeroExtender<_UTF16StringStorage>.self,
+    type(of: s.utf16.base))
+  expectEqualSequence(sample.utf16, s.utf16)
+
+  expectEqual(
+    AnyUnicodeScalars.Eraser<_UTF16StringStorage.UnicodeScalarView>.self,
+    type(of: s.unicodeScalars.base))
+  expectEqualSequence(sample.unicodeScalars, s.unicodeScalars)
+}
+
+suite.test("AnyStringContents/_UTF8StringStorage") {
+
+  let s = AnyStringContents(_UTF8StringStorage(sample.utf8))
+  
+  expectEqual(
+    AnyCodeUnits.ZeroExtender<_UTF8StringStorage>.self,
+    type(of: s.codeUnits.base))
+  expectEqualSequence(sample.utf8.lazy.map { numericCast($0) }, s.codeUnits)
+  
+  expectEqual(
+    AnyUInt16UnicodeView.Eraser<
+      _UnicodeViews<_UTF8StringStorage.SubSequence, UTF8>.TranscodedView<UTF16>
+    >.self,
+    type(of: s.utf16.base))  
+  expectEqualSequence(sample.utf16, s.utf16)
+  
+  expectEqual(
+    AnyUnicodeScalars.Eraser<_UTF8StringStorage.UnicodeScalarView>.self,
+    type(of: s.unicodeScalars.base))
+  expectEqualSequence(sample.unicodeScalars, s.unicodeScalars)
+}
+
+suite.test("AnyStringContents/_Latin1StringStorage") {
+  let s = AnyStringContents(_Latin1StringStorage(latin1Sample.unicodeScalars.map {
+        numericCast($0.value)
+      }))
+  
+  expectEqual(
+    AnyCodeUnits.ZeroExtender<_Latin1StringStorage>.self,
+    type(of: s.codeUnits.base))  
+  expectEqualSequence(latin1Sample.utf16.map { numericCast($0) }, s.codeUnits)
+
+  expectEqual(
+    AnyUInt16UnicodeView.ZeroExtender<_Latin1StringStorage>.self,
+    type(of: s.utf16.base))
+  expectEqualSequence(latin1Sample.utf16, s.utf16)
+  
+  expectEqual(
+    AnyUnicodeScalars.Eraser<
+      OnePerCodeUnit<_Latin1StringStorage.UnicodeScalarView>
+    >.self,
+    type(of: s.unicodeScalars.base))
+  expectEqualSequence(latin1Sample.unicodeScalars, s.unicodeScalars)
+}
 
 suite.test("Bidirectional/UnicodeScalar") {
   let a = AnyUnicodeScalarUnicodeView(
@@ -329,3 +636,4 @@ suite.test("RandomAccess/UnicodeScalar") {
 }
 
 runAllTests()
+*/
