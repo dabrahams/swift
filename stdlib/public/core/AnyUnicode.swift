@@ -10,10 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-//===--- TODO -------------------------------------------------------------===//
-//
-//===----------------------------------------------------------------------===//
-
 /// Types that present useful views and information about Unicode content.
 ///
 /// Unicode and _UnicodeStorage refine this protocol.
@@ -38,7 +34,7 @@ public protocol _UnicodeContent {
   var utf16: UTF16View { get }
 
   /// A type that presents an FCC-normalized view of the string
-  associatedtype FCCNormalizedUTF16View : BidirectionalCollection
+  associatedtype FCCNormalizedUTF16View : UnicodeView
   // where Iterator.Element == UInt16
 
   /// An FCC-normalized view of the string
@@ -223,7 +219,7 @@ where Encoding == Latin1,
     })
   }
 }
-  
+
 //===--- Defaults for UTF16 and ValidUTF16 --------------------------------===//
 public extension _UnicodeStorage
 where Encoding.EncodedScalar == UTF16.EncodedScalar,

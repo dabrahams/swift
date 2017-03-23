@@ -326,7 +326,7 @@ extension _UnicodeViews {
   public typealias TranscodedView<ToEncoding : UnicodeEncoding>
   = _TranscodedView<CodeUnits, Encoding, ToEncoding>
   
-  public func transcoded<ToEncoding: UnicodeEncoding>(
+  public func transcoded<ToEncoding>(
     to targetEncoding: ToEncoding.Type
   ) -> TranscodedView<ToEncoding> {
     return type(of: self).TranscodedView(self.codeUnits, to: targetEncoding)
@@ -708,7 +708,7 @@ internal var _fccNormalizer = _makeFCCNormalizer()
 
 extension _UnicodeViews {
   
-  public typealias FCCNormalizedUTF16View = [UInt16]
+  public typealias FCCNormalizedUTF16View = RandomAccessUnicodeView<[UInt16]>
 
   /// Invokes `body` on a contiguous buffer of our UTF16.
   ///
@@ -730,7 +730,7 @@ extension _UnicodeViews {
     return _withContiguousUTF16 {
       // Start by assuming we need no more storage than we started with for the
       // result.
-      var result  = FCCNormalizedUTF16View(repeating: 0, count: $0.count)
+      var result  = Array<UInt16>(repeating: 0, count: $0.count)
       while true {
         var error = __swift_stdlib_U_ZERO_ERROR
         let usedCount = __swift_stdlib_unorm2_normalize(
@@ -738,7 +738,7 @@ extension _UnicodeViews {
           &result, numericCast(result.count), &error)
         if __swift_stdlib_U_SUCCESS(error) {
           result.removeLast(result.count - numericCast(usedCount))
-          return result
+          return RandomAccessUnicodeView(result)
         }
         _sanityCheck(
           error == __swift_stdlib_U_BUFFER_OVERFLOW_ERROR,
