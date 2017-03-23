@@ -232,7 +232,7 @@ extension UnicodeView {
 //===----------------------------------------------------------------------===//
 
 //===--- Unicode ----------------------------------------------------------===//
-/// Collections of `Character`s derived from `UnicodeContent`.
+/// Collections of `Character` that are also `_UnicodeContent`.
 public protocol Unicode : _UnicodeContent, BidirectionalCollection
 // where Iterator.Element == Character
 {
@@ -313,7 +313,7 @@ class UnicodeBox : FactoryInitializable {
     }
   }
 
-  convenience init<Base: Unicode>(wrapping x: Base)
+  convenience init<Base: _UnicodeContent>(wrapping x: Base)
   where Base.UTF16View.Iterator.Element == UTF16.CodeUnit,
   Base.UnicodeScalarView.Iterator.Element == UnicodeScalar
   {
@@ -323,6 +323,43 @@ class UnicodeBox : FactoryInitializable {
   init(fromSubclass: ()) {}
 }
 
+//===--- Counted ----------------------------------------------------------===//
+// TODO: Counted (forward-only version)
+
+% for Bidirectional in '', 'Bidirectional':
+/// Adds a stored `count` to the given `Base` collection, so that the cost of
+/// counting it is not repeated.
+public struct ${Bidirectional}Counted<Base_: ${Bidirectional}Collection> {
+  public let base: Base_
+  public let count: Base.IndexDistance
+}
+
+extension ${Bidirectional}Counted : ${Bidirectional}CollectionWrapper {
+  public typealias Base = Base_
+  public typealias Index = Base.Index
+  public typealias IndexDistance = Base.IndexDistance
+}
+
+extension ${Bidirectional}Counted : ${Bidirectional}Collection {
+  public init(_ base: Base) {
+    self.base = base
+    self.count = base.count
+  }
+  
+  public init(_ base: Base, count: Base.IndexDistance) {
+    _debugPrecondition(
+      count == base.count, "misstated count of base collection")
+    self.base = base
+    self.count = count
+  }
+  
+  public var underestimatedCount: Int {
+    return numericCast(count)
+  }
+}
+% end
+
+//===--- String -----------------------------------------------------------===//
 public struct String {
   internal enum _Content {
   case utf16(_UTF16StringStorage)
@@ -347,7 +384,114 @@ extension String : BidirectionalCollectionWrapper {
       return base.characters
     }
   }
+
+  public var utf16: AnyUInt16UnicodeView {
+    switch _content {
+    case .utf16(let storage):
+      return AnyUInt16UnicodeView(storage.utf16)
+    case .latin1(let storage):
+      return AnyUInt16UnicodeView(storage.utf16)
+    case .any(let base):
+      return base.utf16
+    }
+  }
+
+  public func isLatin1() -> Bool {
+    switch _content {
+    case .utf16(let storage):
+      return storage.isLatin1()
+    case .latin1(let storage):
+      return storage.isLatin1()
+    case .any(let base):
+      return base.isLatin1()
+    }
+  }
 }
+
+extension _BoundedBufferReference {
+  init<Head : Collection, Middle : Collection, Tail : Collection>(
+    joining head: Head, _ middle: Middle, _ tail: Tail
+  )
+  where
+    Head.Iterator.Element == Iterator.Element,
+    Middle.Iterator.Element == Iterator.Element,
+    Tail.Iterator.Element == Iterator.Element
+  {
+    let newCount = numericCast(head.count) as IndexDistance
+      + numericCast(middle.count) as IndexDistance
+      + numericCast(tail.count) as IndexDistance
+
+    self.init(_uninitializedCount: numericCast(newCount))
+    self.withUnsafeMutableBufferPointer {
+      let (_, i1) = head._copyContents(initializing: $0)
+      
+      let b1 = UnsafeMutableBufferPointer(
+        start: $0.baseAddress + i1, count: $0.count - i1)
+      let (_, i2) = middle._copyContents(initializing: b1)
+
+      let b2 = UnsafeMutableBufferPointer(
+        start: b1.baseAddress + i2, count: b1.count - i2)
+      let (_, i3) = tail._copyContents(initializing: b2)
+      
+      assert(i3 == $0.endIndex)
+    }
+  }
+}
+
+// TODO:
+//
+// - Move Any*UnicodeView into the standard library
+//
+// - Create an existential-able protocol that can be used to extract underlying
+//   UTF16 (including normalized)
+//
+// - Use that to optimize replaceSubrange so we're not working from Characters
+extension String /*: RangeReplaceableCollection*/ {
+  public init() { _content = .utf16(._emptyInstance()) }
+  
+  public mutating func replaceSubrange<C: Collection>(
+    _ target: Range<Index>, with replacement: C
+  )
+  where C.Iterator.Element == Character {
+    let uncountedUTF16 = replacement.lazy.flatMap { $0.utf16 }
+    replaceUTF16(target, with: uncountedUTF16)
+  }
+  
+  mutating func replaceUTF16<C: Collection>(
+    _ target: Range<Index>, with replacement: C
+  )  
+  where C.Iterator.Element == UTF16.CodeUnit {
+    let fasterReplacement = Counted(
+      replacement, count: replacement.count)
+
+    // Try to do in-place replacement
+    let done = replaceUTF16InPlace(target, with: fasterReplacement)
+    if done { return }
+    
+    // TODO: Minimize repeated counting and maxing.  The work is being done
+    // multiple times in some cases.
+    let head = self.utf16[..<target.lowerBound]
+    let tail = self.utf16[target.upperBound...]
+    if isLatin1() && fasterReplacement.max() <= 0xFF {
+      _content = .latin1(
+        _Latin1StringStorage(
+          joining: head.lazy.map { UInt8(truncatingBitPattern: $0) },
+          fasterReplacement.lazy.map { UInt8(truncatingBitPattern: $0) },
+          tail.lazy.map { UInt8(truncatingBitPattern: $0) }))
+    }
+    else {
+      _content = .utf16(_UTF16StringStorage(joining: head, replacement, tail))
+    }
+  }
+
+  mutating func replaceUTF16InPlace<C: Collection>(
+    _ target: Range<Index>, with replacement: C
+  ) -> Bool 
+  where C.Iterator.Element == UTF16.CodeUnit {
+    return false
+  }
+}
+
 /*
   
 
@@ -516,18 +660,15 @@ extension String.Content {
   }
 }
 
+*/
+
 //===----------------------------------------------------------------------===//
 //===--- Tests ------------------------------------------------------------===//
 //===----------------------------------------------------------------------===//
 
-print(MemoryLayout<AnyStringContents>.size)
+print(MemoryLayout<String>.size)
 
 var suite = TestSuite("AnyUnicode")
-suite.test("basics") {
-  let x = AnyUInt16UnicodeView.ZeroExtender(base: Array(3...7) as [UInt16])
-  let y = AnyUInt16UnicodeView.ZeroExtender(base: Array(3...7) as [UInt8])
-  expectTrue(x.elementsEqual(y))
-}
 
 let sample = "abcdefghijklmnopqrstuvwxyz\n"
   + "🇸🇸🇬🇱🇱🇸🇩🇯🇺🇸\n"
@@ -538,10 +679,17 @@ let sample = "abcdefghijklmnopqrstuvwxyz\n"
   + "  ๏ แผ่นดินฮั่นเสื่อมโทรมแสนสังเวช  พระปกเกศกองบู๊กู้ขึ้นใหม่\n"
   + "ᚻᛖ ᚳᚹᚫᚦ ᚦᚫᛏ ᚻᛖ ᛒᚢᛞᛖ ᚩᚾ ᚦᚫᛗ ᛚᚪᚾᛞᛖ ᚾᚩᚱᚦᚹᛖᚪᚱᛞᚢᛗ ᚹᛁᚦ ᚦᚪ ᚹᛖᛥᚫ"
 
-let latin1Sample = String(
+let latin1Sample = String._Content(
   sample.unicodeScalars.lazy.filter { $0.value < 0x100 }.map {
     Character($0)
   })
+/*
+suite.test("basics") {
+  let x = AnyUInt16UnicodeView.ZeroExtender(base: Array(3...7) as [UInt16])
+  let y = AnyUInt16UnicodeView.ZeroExtender(base: Array(3...7) as [UInt8])
+  expectTrue(x.elementsEqual(y))
+}
+
 
 suite.test("AnyStringContents/_UTF16StringStorage") {
 
@@ -607,6 +755,7 @@ suite.test("AnyStringContents/_Latin1StringStorage") {
     type(of: s.unicodeScalars.base))
   expectEqualSequence(latin1Sample.unicodeScalars, s.unicodeScalars)
 }
+*/
 
 suite.test("Bidirectional/UnicodeScalar") {
   let a = AnyUnicodeScalarUnicodeView(
@@ -636,4 +785,3 @@ suite.test("RandomAccess/UnicodeScalar") {
 }
 
 runAllTests()
-*/
