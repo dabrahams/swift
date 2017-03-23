@@ -27,28 +27,28 @@ extension _Latin1StringStorage {
 import StdlibUnittest
 
 protocol AnyUnicodeIndex_ {
-  var encodedPosition: Int64 { get }
+  var encodedOffset: Int64 { get }
 }
 
 func == <T: AnyUnicodeIndex_>(l: T, r: T) -> Bool {
-  return l.encodedPosition == r.encodedPosition
+  return l.encodedOffset == r.encodedOffset
 }
 
 func < <T: AnyUnicodeIndex_>(l: T, r: T) -> Bool {
-  return l.encodedPosition < r.encodedPosition
+  return l.encodedOffset < r.encodedOffset
 }
 
 // FIXME: Not sure if we want to expose the existential versions of these
 func ==(l: AnyUnicodeIndex_, r: AnyUnicodeIndex_) -> Bool {
-  return l.encodedPosition == r.encodedPosition
+  return l.encodedOffset == r.encodedOffset
 }
 
 func < (l: AnyUnicodeIndex_, r: AnyUnicodeIndex_) -> Bool {
-  return l.encodedPosition < r.encodedPosition
+  return l.encodedOffset < r.encodedOffset
 }
 
 struct UnicodeIndex : Comparable, AnyUnicodeIndex_ {
-  var encodedPosition: Int64 { return base.encodedPosition }
+  var encodedOffset: Int64 { return base.encodedOffset }
   
   var base: AnyUnicodeIndex_
   init<Base: AnyUnicodeIndex_>(_ base: Base) {
@@ -58,18 +58,18 @@ struct UnicodeIndex : Comparable, AnyUnicodeIndex_ {
   struct Adapter<BaseView: UnicodeView> : Comparable, AnyUnicodeIndex_
   {
     init(_ base: BaseView.Index) { self.base = base }
-    var encodedPosition : Int64 { return BaseView.encodedPosition(of: base) }
+    var encodedOffset : Int64 { return BaseView.encodedOffset(of: base) }
     let base: BaseView.Index
   }
 }
 
 struct SimpleUnicodeIndex : Comparable, AnyUnicodeIndex_ {
-  var encodedPosition: Int64
+  var encodedOffset: Int64
   static func == (l: SimpleUnicodeIndex, r: SimpleUnicodeIndex) -> Bool {
-    return l.encodedPosition == r.encodedPosition
+    return l.encodedOffset == r.encodedOffset
   }
   static func < (l: SimpleUnicodeIndex, r: SimpleUnicodeIndex) -> Bool {
-    return l.encodedPosition < r.encodedPosition
+    return l.encodedOffset < r.encodedOffset
   }
 }
 
@@ -172,8 +172,8 @@ protocol UnicodeViewWithCommonIndex : BidirectionalCollection, AnyUnicodeView_ {
 }
 
 extension UnicodeViewWithCommonIndex {
-  static func encodedPosition(of i: UnicodeIndex) -> Int64 {
-    return i.encodedPosition
+  static func encodedOffset(of i: UnicodeIndex) -> Int64 {
+    return i.encodedOffset
   }
 }
 
@@ -216,7 +216,7 @@ extension UnicodeViewAdapter {
     if let j = i.base as? UnicodeIndex.Adapter<Base> {
       return j.base
     }
-    return base.index(atEncodedPosition: i.encodedPosition)
+    return base.index(atEncodedOffset: i.encodedOffset)
   }
   
   subscript(i: UnicodeIndex) -> Base.Iterator.Element {
@@ -253,27 +253,27 @@ protocol CodeUnitAdapter : RandomAccessCollection {
 
 extension CodeUnitAdapter {
   var startIndex: UnicodeIndex {
-    return UnicodeIndex(SimpleUnicodeIndex(encodedPosition: 0))
+    return UnicodeIndex(SimpleUnicodeIndex(encodedOffset: 0))
   }
   
   var endIndex: UnicodeIndex {
-    return UnicodeIndex(SimpleUnicodeIndex(encodedPosition: numericCast(base.count)))
+    return UnicodeIndex(SimpleUnicodeIndex(encodedOffset: numericCast(base.count)))
   }
   
   func index(after i: UnicodeIndex) -> UnicodeIndex {
-    return UnicodeIndex(SimpleUnicodeIndex(encodedPosition: i.encodedPosition + 1))
+    return UnicodeIndex(SimpleUnicodeIndex(encodedOffset: i.encodedOffset + 1))
   }
   
   func index(before i: UnicodeIndex) -> UnicodeIndex {
-    return UnicodeIndex(SimpleUnicodeIndex(encodedPosition: i.encodedPosition - 1))
+    return UnicodeIndex(SimpleUnicodeIndex(encodedOffset: i.encodedOffset - 1))
   }
   
   func index(_ i: UnicodeIndex, offsetBy n: Int64) -> UnicodeIndex {
-    return UnicodeIndex(SimpleUnicodeIndex(encodedPosition: i.encodedPosition + n))
+    return UnicodeIndex(SimpleUnicodeIndex(encodedOffset: i.encodedOffset + n))
   }
   
   func distance(from i: UnicodeIndex, to j: UnicodeIndex) -> Int64 {
-    return j.encodedPosition - i.encodedPosition
+    return j.encodedOffset - i.encodedOffset
   }
 }
 
@@ -296,10 +296,10 @@ Base_.Indices : RandomAccessCollection {
   init(_ base: Base) { self._base = base }
   let _base: Base
 
-  static func encodedPosition(of i: Index) -> Int64 {
+  static func encodedOffset(of i: Index) -> Int64 {
     return numericCast(i)
   }
-  func index(atEncodedPosition n: Int64) -> Index {
+  func index(atEncodedOffset n: Int64) -> Index {
     return numericCast(n)
   }
 }
@@ -341,7 +341,7 @@ extension AnyUTF16 {
     let base: Base
 
     subscript(i: Index) -> Element {
-      return numericCast(base[base.index(atOffset: i.encodedPosition)])
+      return numericCast(base[base.index(atOffset: i.encodedOffset)])
     }
 
     public func withExistingUnsafeBuffer<R>(
@@ -432,7 +432,7 @@ extension AnyUnicodeBidirectionalUInt32 {
     let base: Base
 
     subscript(i: Index) -> Element {
-      return numericCast(base[base.index(atOffset: i.encodedPosition)])
+      return numericCast(base[base.index(atOffset: i.encodedOffset)])
     }
 
     public func withExistingUnsafeBuffer<R>(
