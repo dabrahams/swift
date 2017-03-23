@@ -541,9 +541,8 @@ func _getSuperclass(_ t: Any.Type) -> AnyClass? {
 // and type checking will fail.
 
 /// Returns `true` if `object` is uniquely referenced.
-@_versioned
-@_transparent
-internal func _isUnique<T>(_ object: inout T) -> Bool {
+public // testable
+func _isUnique<T>(_ object: inout T) -> Bool {
   return Bool(Builtin.isUnique(&object))
 }
 

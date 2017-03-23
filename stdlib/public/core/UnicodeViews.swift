@@ -30,11 +30,42 @@ internal func __swift_stdlib_U_FAILURE(_ x: __swift_stdlib_UErrorCode) -> Bool {
  return x.rawValue > __swift_stdlib_U_ZERO_ERROR.rawValue
 }
 
+
 /// Unicode views should conform to this protocol, which supports index
 /// interchange and String type erasure.
 public protocol UnicodeView : BidirectionalCollection {
   func index(atEncodedPosition: Int64) -> Index
   static func encodedPosition(of: Index) -> Int64
+}
+
+public struct RandomAccessUnicodeView<Base_: RandomAccessCollection> {
+  public typealias Base = Base_
+  public var base: Base
+  public init(_ base: Base) { self.base = base }
+}
+
+extension RandomAccessUnicodeView : BidirectionalCollectionWrapper {
+  public struct Index : ForwardingWrapper, Comparable {
+    public var base: Base_.IndexDistance
+  }
+  public typealias IndexDistance = Base.IndexDistance
+  public func _wrap(_ i: Base_.Index) -> Index {
+    return Index(base: base.offset(of: i))
+  }
+  public func _unwrap(_ i: Index) -> Base.Index {
+    return base.index(atOffset: i.base)
+  }
+}
+
+extension RandomAccessUnicodeView : RandomAccessCollection {}
+
+extension RandomAccessUnicodeView : UnicodeView {
+  public func index(atEncodedPosition position: Int64) -> Index {
+    return Index(base: position^)
+  }
+  public static func encodedPosition(of i: Index) -> Int64 {
+    return i.base^
+  }
 }
 
 /// A collection of `CodeUnit`s to be interpreted by some `Encoding`.
@@ -571,7 +602,7 @@ extension _UnicodeViews : _UTextable {
 
 extension _UnicodeViews {
   
-  public struct CharacterView : BidirectionalCollection {
+  public struct CharacterView : UnicodeView {
 
     public init(_ codeUnits: CodeUnits, _: Encoding.Type = Encoding.self) {
       self.storage = _UnicodeViews(codeUnits)
@@ -581,17 +612,29 @@ extension _UnicodeViews {
 
     public typealias SubSequence = BidirectionalSlice<CharacterView>
 
-    public typealias Index = CodeUnits.Index
-    public var startIndex: Index { return storage.codeUnits.startIndex }
-    public var endIndex: Index { return storage.codeUnits.endIndex }
+    public struct Index : ForwardingWrapper, Comparable {
+      public var base: CodeUnits.IndexDistance
+    }
+    
+    public func index(atEncodedPosition position: Int64) -> Index {
+      return Index(base: position^)
+    }
+    public static func encodedPosition(of i: Index) -> Int64 {
+      return i.base^
+    }
+    
+    public var startIndex: Index { return Index(base: 0) }
+    public var endIndex: Index {
+      return Index(base: storage.codeUnits.count)
+    }
 
     public subscript(i: Index) -> Character {
       let j = index(after: i)
-      let contents = _UnicodeViews<
-                       // explicit generic parameters shouldn't be needed
-                       // <rdar://problem/30882312>
-                       CodeUnits.SubSequence,Encoding
-                     >(storage.codeUnits[i..<j], Encoding.self)
+      let contents = _UnicodeViews_(
+        storage.codeUnits[
+          storage.codeUnits.index(atOffset: i.base)
+          ..< storage.codeUnits.index(atOffset: j.base)],
+        Encoding.self)
         
       if let small = Character(_smallUtf8: contents.transcoded(to: UTF8.self)) {
         return small
@@ -605,31 +648,30 @@ extension _UnicodeViews {
     }     
 
     public func index(after i: Index) -> Index {
-      // FIXME: there is always a grapheme break between two scalars that are both
-      // < U+0300.  Use that to optimize.  Can we make a stronger statement, that
-      // there's always a break before any scalar < U+0300?
+      // FIXME: there is always a grapheme break between two scalars that are
+      // both < U+0300.  Use that to optimize.  Can we make a stronger
+      // statement, that there's always a break before any scalar < U+0300?
       // _debugLog("index(after: \(i))")
-      let nextOffset = _withUBreakIterator(at: i) {
-        __swift_stdlib_ubrk_following($0, storage.codeUnits.offset(of: i)^)
+      let nextOffset = _withUBreakIterator {
+        __swift_stdlib_ubrk_following($0, i.base^)
       }
       // _debugLog("  index(after: \(i)): \(nextOffset)")
-      return storage.codeUnits.index(atOffset: nextOffset)
+      return Index(base: nextOffset^)
     }
 
     public func index(before i: Index) -> Index {
-      // FIXME: there is always a grapheme break between two scalars that are both
-      // < U+0300.  Use that to optimize.  Can we make a stronger statement, that
-      // there's always a break before any scalar < U+0300?
+      // FIXME: there is always a grapheme break between two scalars that are
+      // both < U+0300.  Use that to optimize.  Can we make a stronger
+      // statement, that there's always a break before any scalar < U+0300?
       // _debugLog("index(before: \(i))")
-      let previousOffset = _withUBreakIterator(at: i) {
-        __swift_stdlib_ubrk_preceding($0, storage.codeUnits.offset(of: i)^)
+      let previousOffset = _withUBreakIterator {
+        __swift_stdlib_ubrk_preceding($0, i.base^)
       }
       // _debugLog("  -> \(previousOffset)")
-      return storage.codeUnits.index(atOffset: previousOffset)
+      return Index(base: previousOffset^)
     }
-    internal func _withUBreakIterator<R>(
-      at i: Index, _ body: (OpaquePointer)->R
-    ) -> R {
+    
+    internal func _withUBreakIterator<R>(_ body: (OpaquePointer)->R) -> R {
       var err = __swift_stdlib_U_ZERO_ERROR;
 
       // _debugLog("ubrk_open")
