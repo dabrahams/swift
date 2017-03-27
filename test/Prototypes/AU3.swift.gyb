@@ -106,14 +106,23 @@ public struct String {
       ('latin1', '_Latin1StringStorage'),
       ('any', 'UnicodeContentBox'),
       ('cocoa', 'NSStringPayload'),
-      ('small1', 'UInt61'),
-      ('small2', 'UInt61'),
-      ('small3', 'UInt61')
+      ('smallUTF16', 'SmallUTF16'),
+      ('ascii5Bit', 'ASCII5Bit'),
+      ('ascii6Bit', 'ASCII6Bit')
     ]
 }%
   public struct Content {
     struct NSStringPayload {
       let _base: TrueReference<_NSStringCore>
+    }
+    struct SmallUTF16 {
+      let bits: UInt61
+    }
+    struct ASCII5Bit {
+      let bits: UInt61
+    }
+    struct ASCII6Bit {
+      let bits: UInt61
     }
     internal enum Representation {
       % for tag, Payload in allCases:
@@ -135,60 +144,48 @@ extension String.Content.NSStringPayload {
   }
 }
 
-// Conformance not actually needed, but it gets us a bunch of implementation for
-// free.
-extension String.Content.NSStringPayload : AnyUnicodeContent {
-  // FIXME: implement as many of these as possible
-  // public var isKnownLatin1: Bool { false }
+extension String.Content.NSStringPayload : UnicodeStorage {
+  public var encoding: UTF16.Type { return UTF16.self }
   public var isKnownASCII: Bool { return object._fastCStringContents(0) != nil }
-  // var isKnownFCCNormalized: Bool { get }
-  // var isKnownFCDForm: Bool { get }
-  // var isKnownNFDNormalized: Bool { get }
-  // var isKnownNFCNormalized: Bool { get }
-  // func isLatin1() -> Bool
-  // func isASCII() -> Bool
-}
 
-extension String.Content.NSStringPayload : UnicodeContent {
-  internal var _utf16: _NSStringUTF16 {
-    return _NSStringUTF16(base: object)
+  internal struct CodeUnits : RandomAccessCollection {
+    var base: _NSStringCore
+    var startIndex: Int { return 0 }
+    var endIndex: Int { return base.length() }
+    subscript(i: Int) -> UTF16.CodeUnit {
+      return base.characterAtIndex(i)
+    }
+    public func withExistingUnsafeBuffer<R>(
+      _ body: (UnsafeBufferPointer<UTF16.CodeUnit>) throws -> R
+    ) rethrows -> R? {
+      guard let baseAddress = base._fastCharacterContents() else { return nil }
+      defer { _fixLifetime(self) }
+      return try body(UnsafeBufferPointer(start: baseAddress, count: base.length()))
+    }
   }
   
-  public var utf16: RandomAccessUnicodeView<_NSStringUTF16> {
-    return RandomAccessUnicodeView(_utf16)
+  public var codeUnits: CodeUnits {
+    return CodeUnits(base: object)
+  }
+
+  public var utf16: RandomAccessUnicodeView<CodeUnits> {
+    return RandomAccessUnicodeView(codeUnits)
   }
   
   public var fccNormalizedUTF16: AnyUInt16UnicodeView {
     return AnyUInt16UnicodeView(
-      _UnicodeViews(_utf16, UTF16.self).fccNormalizedUTF16
+      _UnicodeViews(codeUnits, UTF16.self).fccNormalizedUTF16
     )
   }
   
   public var characters: AnyCharacterUnicodeView {
-    return AnyCharacterUnicodeView(_UnicodeViews(_utf16, UTF16.self).characters)
+    return AnyCharacterUnicodeView(
+      _UnicodeViews(codeUnits, UTF16.self).characters)
   }
   
   public var unicodeScalars: AnyUnicodeScalarUnicodeView {
     return AnyUnicodeScalarUnicodeView(
-      _UnicodeViews(_utf16, UTF16.self).scalars)
-  }
-}
-
-/// A wrapper around `_NSStringCore` that confers `RandomAccessCollection`
-/// conformance.
-internal struct _NSStringUTF16 : RandomAccessCollection {
-  var base: _NSStringCore
-  var startIndex: Int { return 0 }
-  var endIndex: Int { return base.length() }
-  subscript(i: Int) -> UTF16.CodeUnit {
-    return base.characterAtIndex(i)
-  }
-  public func withExistingUnsafeBuffer<R>(
-    _ body: (UnsafeBufferPointer<UTF16.CodeUnit>) throws -> R
-  ) rethrows -> R? {
-    guard let baseAddress = base._fastCharacterContents() else { return nil }
-    defer { _fixLifetime(self) }
-    return try body(UnsafeBufferPointer(start: baseAddress, count: base.length()))
+      _UnicodeViews(codeUnits, UTF16.self).scalars)
   }
 }
 
@@ -240,7 +237,7 @@ def switch(s):
       %(s)s
     case .cocoa(let x):
       %(s)s
-    case .small1, .small2, .small3: fatalError("unsupported")
+    case .smallUTF16, .ascii5Bit, .ascii6Bit: fatalError("unsupported")
     }""" % locals()
   
 }%
@@ -321,6 +318,28 @@ extension Collection where Iterator.Element == UTF16.CodeUnit {
   }
 }
 
+internal extension UInt61 {
+  init?<S: Sequence>(packing source: S, bitsPerElement: Int)
+  where S.Iterator.Element: UnsignedInteger {
+    var r: Int64 = -1
+    var lastElement: Int64 = 0
+    var shift: Int64 = 0
+    let mask: Int64 = (1 << numericCast(bitsPerElement)) - 1
+    let low61: Int64 = ~(-1 << 61)
+    for x in source {
+      let x64 = numericCast(x) as Int64
+      let bitsToClear = (~(x64 & mask) << shift) & low61
+      r &= ~bitsToClear
+      // If we can't recover the element, fail
+      if (r >> shift) & mask != x64 { return nil }
+      shift += numericCast(bitsPerElement)
+      lastElement = x64
+    }
+    if lastElement == mask { return nil }
+    self = UInt61(Int(r & low61))
+  }
+}
+
 extension String.Content {
   public init() { _rep = .utf16(._emptyInstance()) }
 
@@ -336,7 +355,7 @@ extension String.Content {
       // FIXME: don't we want to return nil in the cocoa case, since this is
       // merely used for uniqueness checking and NSString is immutable?
       return ObjectIdentifier(storage.object)
-    case .small1, .small2, .small3:
+    case .smallUTF16, .ascii5Bit, .ascii6Bit:
       return nil
     }
   }
@@ -396,7 +415,7 @@ extension String.Content {
       return storage._tryToReplaceSubrange(
         from: t.lowerBound, to: t.upperBound,
         with: replacement.lazy.map { UInt8(truncatingBitPattern: $0) })
-    case .any, .cocoa, .small1, .small2, .small3:
+    case .any, .cocoa, .smallUTF16, .ascii5Bit, .ascii6Bit:
       return false
     }
   }
@@ -439,8 +458,13 @@ extension ObjectIdentifier {
 //===--- Tests ------------------------------------------------------------===//
 //===----------------------------------------------------------------------===//
 
-
 var suite = TestSuite("AnyUnicode")
+
+suite.test("packing") {
+  expectEqual(nil, UInt61(packing: CollectionOfOne(32 as UInt), bitsPerElement: 5))
+  expectEqual(nil, UInt61(packing: CollectionOfOne(31 as UInt), bitsPerElement: 5))
+  expectEqual(30 | (~0 << 5), UInt61(packing: CollectionOfOne(30 as UInt), bitsPerElement: 5))
+}
 
 let sample = "abcdefghijklmnopqrstuvwxyz\n"
   + "🇸🇸🇬🇱🇱🇸🇩🇯🇺🇸\n"
