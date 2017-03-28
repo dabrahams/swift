@@ -161,19 +161,20 @@ extension String.Content {
     return Packed(
       bitsPerElement < 7 ?
       source.lazy.map { (x: UInt16) -> UInt16 in 
-        numericCast(String.Content.packingTable.index(
-            of: numericCast(x)) ?? 0xFF)
+        numericCast(
+          String.Content.packingTable.lazy.map { UInt16($0) }.index(
+            of: x) ?? 0xFF)
       }:
       source.lazy.map { 
-        [ mask = ~(0 as UInt16) << bitsPerElement ] (x: UInt16) -> UInt16 in 
-        (x & mask) | (x &- 32) & ~mask
+        [ mask = UInt16(truncatingBitPattern: ~0 << UInt32(bitsPerElement)) ]
+        (x: UInt16) -> UInt16 in (x & mask) | (x &- 32) & ~mask
       },
       bitsPerElement: numericCast(bitsPerElement)
     )
   }
   
   static func _unpack(
-    bits: UInt61, bitsPerElement: UInt61
+    bits: UInt61, bitsPerElement: UInt16
   ) -> LazyMapRandomAccessCollection<String.Content.Packed, UInt16> {
     let source = String.Content.Packed(
       representation: numericCast(bits & (~(0 as UInt61) >> 1)),
@@ -185,7 +186,7 @@ extension String.Content {
       UInt16(String.Content.packingTable[numericCast(x)])
     }
     : source.lazy.map { 
-      [ mask = ~(0 as UInt16) << numericCast(bitsPerElement) ] 
+      [ mask = UInt16(truncatingBitPattern: ~0 << UInt32(bitsPerElement)) ]
       (x: UInt16) -> UInt16 in
       (x &+ 32) & ~mask
     }
@@ -603,8 +604,7 @@ extension String.Content {
     else if source.max().unsafelyUnwrapped <= 0xff {
       self.init(
         .latin1(
-          _Latin1StringStorage(
-            source.lazy.map { UInt8(truncatingBitPattern: $0) })))
+          _Latin1StringStorage(source.lazy.map { UInt8(truncatingBitPatternXXX: $0) })))
     }
     else {
       self.init(.utf16(_UTF16StringStorage(source)))
@@ -774,19 +774,67 @@ suite.test("UInt61.packing") {
       bitsPerElement: 5))
 }
 
+extension String.Content {
+  var bitsPerCodeUnit: Int {
+    switch _rep {
+    case .utf16: return 16
+    case .latin1: return 8
+    case .cocoa(let n): return n.isKnownASCII ? 8 : 16
+    case .any: return 16
+    case .inline7or16(let x): return x.bitsPerElement
+    case .inline5or6(let x):  return x.bitsPerElement
+    }
+  }
+}
+
 suite.test("Content.Packing") {
+  // We can store up to 4 UTF16 code units in the inline7or16 case
   var c = String.Content(utf16: "a".utf16)
-  dump(c)
   expectEqualSequence("a".utf16, Array(c.utf16))
+  expectNotNil(c._inline7or16)
+  expectEqual(16, c.bitsPerCodeUnit)
+  
   c = String.Content(utf16: "ab".utf16)
-  dump(c)
   expectEqualSequence("ab".utf16, Array(c.utf16))
+  expectNotNil(c._inline7or16)
+  expectEqual(16, c.bitsPerCodeUnit)
+  
   c = String.Content(utf16: "abc".utf16)
-  dump(c)
   expectEqualSequence("abc".utf16, Array(c.utf16))
+  expectNotNil(c._inline7or16)
+  expectEqual(16, c.bitsPerCodeUnit)
+  
   c = String.Content(utf16: "abcd".utf16)
-  dump(c)
   expectEqualSequence("abcd".utf16, Array(c.utf16))
+  expectNotNil(c._inline7or16)
+  expectEqual(16, c.bitsPerCodeUnit)
+  
+  c = String.Content(utf16: "ab\u{ffe9}d".utf16)
+  expectEqualSequence("ab\u{ffe9}d".utf16, Array(c.utf16))
+  expectNotNil(c._inline7or16)
+  expectEqual(16, c.bitsPerCodeUnit)
+
+  // If the last code unit is sufficiently high-valued, we overflow the
+  // high-order partial segment and fall back to dynamic storage
+  c = String.Content(utf16: "abc\u{ffe9}".utf16)
+  expectEqualSequence("abc\u{ffe9}".utf16, Array(c.utf16))
+  expectNotNil(c._utf16)
+
+  // If it's all ASCII, we may fit in the inline 7 case.
+  c = String.Content(utf16: "abcde".utf16)
+  expectEqualSequence("abcde".utf16, Array(c.utf16))
+  expectNotNil(c._inline7or16)
+  expectEqual(7, c.bitsPerCodeUnit)
+
+  c = String.Content(utf16: "abcdefgh".utf16)
+  expectEqualSequence("abcdefgh".utf16, Array(c.utf16))
+  expectNotNil(c._inline7or16)
+  expectEqual(7, c.bitsPerCodeUnit)
+
+  c = String.Content(utf16: "abcdefghi".utf16)
+  expectEqualSequence("abcdefghi".utf16, Array(c.utf16))
+  expectNotNil(c._inline7or16)
+  expectEqual(7, c.bitsPerCodeUnit)
 }
 
 
