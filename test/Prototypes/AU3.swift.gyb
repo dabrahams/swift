@@ -106,23 +106,182 @@ public struct String {
       ('latin1', '_Latin1StringStorage'),
       ('any', 'UnicodeContentBox'),
       ('cocoa', 'NSStringPayload'),
-      ('small1', 'UInt61'),
-      ('small2', 'UInt61'),
-      ('small3', 'UInt61')
+      ('inline5or6', 'Inline5or6'),
+      ('inline7or16', 'Inline7or16'),
     ]
 }%
+  
   public struct Content {
-    struct NSStringPayload {
-      let _base: TrueReference<_NSStringCore>
-    }
     internal enum Representation {
       % for tag, Payload in allCases:
     case ${tag}(${Payload})
       % end
     }
+    internal init(_ representation: Representation) {
+      self._rep = representation
+    }
     internal var _rep: Representation
   }
   public var content: Content
+}
+
+/// Case accessors
+extension String.Content {
+  % for tag, Payload in allCases:
+  /// Either the payload of `case .${tag}`, or `nil` if that is not the current
+  /// case.
+  ///
+  /// - Note: setting this property to nil clears the `String`
+  internal var _${tag}: ${Payload}? {
+    get {
+      if case .${tag}(let x) = _rep { return x }
+      return nil
+    }
+    set {
+      if let v = newValue { _rep = .${tag}(v) }
+      else if _${tag} != nil { self = String.Content() }
+    }
+  }
+  % end
+}
+
+//===--- Inline5or6/Inline7or16 --------------------------------------------===//
+extension String.Content {
+  static let packingTable : [UInt8] = [
+    105, 49, 114, 100, 48, 107, 97, 103, 84, 32, 101, 110, 111, 117, 112, 102,
+    99, 115, 52, 106, 67, 46, 116, 83, 109, 120, 108, 77, 104, 73, 82, 87, 66,
+    55, 89, 86, 85, 70, 122, 53, 54, 72, 75, 76, 98, 118, 50, 121, 78, 74, 69,
+    95, 71, 57, 119, 56, 47, 45, 80, 68, 79, 51, 65, 88]
+  typealias Packed = PackedUnsignedIntegers<UInt60, UInt16>
+  
+  static func _pack<Source: Collection>(
+    utf16 source: Source, bitsPerElement: UInt16
+  ) -> Packed?
+  where Source.Iterator.Element == UTF16.CodeUnit {
+    return Packed(
+      bitsPerElement < 7 ?
+      source.lazy.map { (x: UInt16) -> UInt16 in 
+        numericCast(String.Content.packingTable.index(
+            of: numericCast(x)) ?? 0xFF)
+      }:
+      source.lazy.map { 
+        [ mask = ~(0 as UInt16) << bitsPerElement ] (x: UInt16) -> UInt16 in 
+        (x & mask) | (x &- 32) & ~mask
+      },
+      bitsPerElement: numericCast(bitsPerElement)
+    )
+  }
+  
+  static func _unpack(
+    bits: UInt61, bitsPerElement: UInt61
+  ) -> LazyMapRandomAccessCollection<String.Content.Packed, UInt16> {
+    let source = String.Content.Packed(
+      representation: numericCast(bits & (~(0 as UInt61) >> 1)),
+      bitsPerElement: numericCast(bitsPerElement)
+    )
+    return bitsPerElement < 7
+    ? source.lazy.map {
+      (x: UInt16) -> UInt16 in
+      UInt16(String.Content.packingTable[numericCast(x)])
+    }
+    : source.lazy.map { 
+      [ mask = ~(0 as UInt16) << numericCast(bitsPerElement) ] 
+      (x: UInt16) -> UInt16 in
+      (x &+ 32) & ~mask
+    }
+  }
+}
+  
+% for (N,W) in (5,6), (7,16):
+extension String.Content {
+  struct Inline${N}or${W} {
+    let bits: UInt61
+  }
+}
+
+
+extension String.Content.Inline${N}or${W} {
+  init?<Source: Collection>(utf16 source: Source)
+  where Source.Iterator.Element == UTF16.CodeUnit {
+    if let c = String.Content._pack(utf16: source, bitsPerElement: ${W}) {
+      bits = numericCast(c.representation) | (1 as UInt61) << 60
+    }
+    else if let c = String.Content._pack(utf16: source, bitsPerElement: ${N}) {
+      bits = numericCast(c.representation) 
+    }
+    else { return nil }
+  }
+
+  var bitsPerElement: Int { return bits >> 60 == 0 ? ${N} : ${W} }
+}
+
+extension String.Content.Inline${N}or${W} : AnyUnicodeContent {
+  // FIXME: implement as many of these as possible
+  // public var isKnownLatin1: Bool { false }
+  public var isKnownASCII: Bool { return bitsPerElement <= 7 }
+  // var isKnownFCCNormalized: Bool { get }
+  // var isKnownFCDForm: Bool { get }
+  // var isKnownNFDNormalized: Bool { get }
+  // var isKnownNFCNormalized: Bool { get }
+  // func isLatin1() -> Bool
+  // func isASCII() -> Bool
+}
+
+extension String.Content.Inline${N}or${W} : UnicodeContent {
+  internal var _utf16: LazyMapRandomAccessCollection<String.Content.Packed, UTF16.CodeUnit>
+  {
+    return String.Content._unpack(
+      bits: bits, 
+      bitsPerElement: numericCast(self.bitsPerElement)
+    )
+  }
+  
+  public var utf16: AnyUInt16UnicodeView {
+    return AnyUInt16UnicodeView(RandomAccessUnicodeView(_utf16))
+  }
+  
+  public var fccNormalizedUTF16: AnyUInt16UnicodeView {
+    return bitsPerElement <= 8
+    ? utf16
+    : AnyUInt16UnicodeView(
+      _UnicodeViews(_utf16, UTF16.self).fccNormalizedUTF16
+    )
+  }
+  
+  public var characters: AnyCharacterUnicodeView {
+    if bitsPerElement <= 8 {
+      let _characters = _utf16.lazy.map {
+        // FIXME: Use _unchecked: in stdlib
+        Character(UnicodeScalar(UInt32($0))!)
+      }
+      return AnyCharacterUnicodeView(RandomAccessUnicodeView(_characters))
+    }
+    return AnyCharacterUnicodeView(
+      _UnicodeViews(_utf16, UTF16.self).characters)
+  }
+  
+  public var unicodeScalars: AnyUnicodeScalarUnicodeView {
+    if bitsPerElement <= 8 {
+      return AnyUnicodeScalarUnicodeView(
+      RandomAccessUnicodeView(
+        _utf16.lazy.map {
+            // FIXME: Use _unchecked: in stdlib
+            UnicodeScalar(UInt32($0))!
+          }))
+    }
+    return AnyUnicodeScalarUnicodeView(
+      _UnicodeViews(_utf16, UTF16.self).scalars)
+  }
+}
+
+% end
+
+
+//===--- NSStringPayload --------------------------------------------------===//
+extension String.Content {
+  struct NSStringPayload {
+    let _base: TrueReference<_NSStringCore>
+  }
 }
 
 extension String.Content.NSStringPayload {
@@ -135,8 +294,6 @@ extension String.Content.NSStringPayload {
   }
 }
 
-// Conformance not actually needed, but it gets us a bunch of implementation for
-// free.
 extension String.Content.NSStringPayload : AnyUnicodeContent {
   // FIXME: implement as many of these as possible
   // public var isKnownLatin1: Bool { false }
@@ -191,27 +348,8 @@ internal struct _NSStringUTF16 : RandomAccessCollection {
     return try body(UnsafeBufferPointer(start: baseAddress, count: base.length()))
   }
 }
+//===----------------------------------------------------------------------===//
 
-
-/// Case accessors
-extension String.Content {
-  % for tag, Payload in allCases:
-  /// Either the payload of `case .${tag}`, or `nil` if that is not the current
-  /// case.
-  ///
-  /// - Note: setting this property to nil clears the `String`
-  internal var _${tag}: ${Payload}? {
-    get {
-      if case .${tag}(let x) = _rep { return x }
-      return nil
-    }
-    set {
-      if let v = newValue { _rep = .${tag}(v) }
-      else if _${tag} != nil { self = String.Content() }
-    }
-  }
-  % end
-}
 
 extension String : Unicode {
   public typealias Base = AnyCharacterUnicodeView
@@ -240,9 +378,11 @@ def switch(s):
       %(s)s
     case .cocoa(let x):
       %(s)s
-    case .small1, .small2, .small3: fatalError("unsupported")
+    case .inline5or6(let x):
+      %(s)s
+    case .inline7or16(let x):
+      %(s)s
     }""" % locals()
-  
 }%
 
 extension String.Content : UnicodeContent {
@@ -415,6 +555,12 @@ struct PackedUnsignedIntegers<
     self.representation = representation
     self.bitsPerElement = bitsPerElement
   }
+
+  init(representation: Representation, bitsPerElement: Representation) {
+    self.representation = representation
+    self.bitsPerElement = bitsPerElement
+  }
+  
   let bitsPerElement: Representation
   let representation: Representation
 }
@@ -443,6 +589,28 @@ extension PackedUnsignedIntegers : RandomAccessCollection {
 extension String.Content {
   public init() { _rep = .utf16(._emptyInstance()) }
 
+  public init<C: Collection>(utf16 source: C)
+  where C.Iterator.Element == UTF16.CodeUnit {
+    if source.isEmpty {
+      self.init()
+    }
+    else if let x = Inline7or16(utf16: source) {
+      self.init(.inline7or16(x))
+    }
+    else if let x = Inline5or6(utf16: source) {
+      self.init(.inline5or6(x))
+    }
+    else if source.max().unsafelyUnwrapped <= 0xff {
+      self.init(
+        .latin1(
+          _Latin1StringStorage(
+            source.lazy.map { UInt8(truncatingBitPattern: $0) })))
+    }
+    else {
+      self.init(.utf16(_UTF16StringStorage(source)))
+    }
+  }
+  
   internal var _storageID: ObjectIdentifier? {
     switch _rep {
     case .utf16(let storage):
@@ -455,7 +623,7 @@ extension String.Content {
       // FIXME: don't we want to return nil in the cocoa case, since this is
       // merely used for uniqueness checking and NSString is immutable?
       return ObjectIdentifier(storage.object)
-    case .small1, .small2, .small3:
+    case .inline5or6, .inline7or16:
       return nil
     }
   }
@@ -481,12 +649,14 @@ extension String.Content {
     if replacement._isLatin1() && (
       isKnownLatin1 || head._isLatin1() && tail._isLatin1()
     ) {
+      // FIXME: check to see if we can use the inline5or6 representation.
       let s = _Latin1StringStorage(
         joining: head._low8Bits, replacement._low8Bits, tail._low8Bits)
       s.isKnownASCII = !s.contains { $0 > 0x7f }
       _latin1 = s
     }
     else {
+      // FIXME: check to see if we can use the inline7or16 representation.
       _utf16 = _UTF16StringStorage(joining: head, replacement, tail)
     }
   }
@@ -515,7 +685,7 @@ extension String.Content {
       return storage._tryToReplaceSubrange(
         from: t.lowerBound, to: t.upperBound,
         with: replacement.lazy.map { UInt8(truncatingBitPattern: $0) })
-    case .any, .cocoa, .small1, .small2, .small3:
+    case .any, .cocoa, .inline5or6, .inline7or16:
       return false
     }
   }
@@ -603,6 +773,22 @@ suite.test("UInt61.packing") {
       [31, 29, 23, 19, 17, 13, 11, 7, 5, 3, 2, 1, 1] as [UInt],
       bitsPerElement: 5))
 }
+
+suite.test("Content.Packing") {
+  var c = String.Content(utf16: "a".utf16)
+  dump(c)
+  expectEqualSequence("a".utf16, Array(c.utf16))
+  c = String.Content(utf16: "ab".utf16)
+  dump(c)
+  expectEqualSequence("ab".utf16, Array(c.utf16))
+  c = String.Content(utf16: "abc".utf16)
+  dump(c)
+  expectEqualSequence("abc".utf16, Array(c.utf16))
+  c = String.Content(utf16: "abcd".utf16)
+  dump(c)
+  expectEqualSequence("abcd".utf16, Array(c.utf16))
+}
+
 
 let sample = "abcdefghijklmnopqrstuvwxyz\n"
   + "🇸🇸🇬🇱🇱🇸🇩🇯🇺🇸\n"
