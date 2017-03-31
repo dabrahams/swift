@@ -53,35 +53,70 @@ public protocol UnicodeViewZ : _UnicodeViewZ {
   associatedtype SubSequence: _UnicodeViewZ = UnicodeViewSlice<Self>
 }
 
-public struct UnicodeViewSlice<Base: _UnicodeViewZ> : UnicodeViewZ {
-  public let base: Base
-  public let startIndex: Base.Index
-  public let endIndex: Base.Index
+public struct UnicodeViewSlice<BaseView: _UnicodeViewZ>
+  : BidirectionalCollectionWrapper, UnicodeViewZ {
+  public typealias Base = BidirectionalSlice<BaseView>
+  public typealias Index = Base.Index
+  public typealias IndexDistance = Base.IndexDistance
+  public typealias Iterator = Base.Iterator
+  public var base: Base
+  public let startIndex: Index
+  public let endIndex: Index
 
   public func index(atEncodedOffset n: Int64) -> Index {
-    return base.index(atEncodedOffset: n)
+    return base.base.index(atEncodedOffset: n)
   }
   public static func encodedOffset(of i: Index) -> Int64 {
-    return Base.encodedOffset(of: i)
-  }
-
-  public func index(after i: Index) -> Index { return base.index(after: i) }
-  public func index(before i: Index) -> Index { return base.index(before: i) }
-  public func distance(from i: Index, to j: Index) -> Base.IndexDistance {
-    return base.distance(from: i, to: j)
-  }
-  public func index(i: Index, offsetBy n: Base.IndexDistance) -> Index {
-    return base.index(i, offsetBy: n)
-  }
-  public subscript(i: Index) -> Iterator.Element {
-    return base[i]
+    return BaseView.encodedOffset(of: i)
   }
   public typealias SubSequence = UnicodeViewSlice
+  
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return UnicodeViewSlice(
+      base: self, startIndex: bounds.lowerBound, endIndex: bounds.upperBound)
+  }
 }
 
-extension _UnicodeViewZ where SubSequence == UnicodeViewSlice<Self> {
-  public subscript(bounds: Range<Index>) -> UnicodeViewSlice<Self> {
-    return UnicodeViewSlice(
+extension UnicodeViewZ where Self : RangeReplaceableCollection {
+  typealias SubSequence = RangeReplaceableUnicodeViewSlice<Self>
+}
+
+public struct RangeReplaceableUnicodeViewSlice<
+  BaseView: _UnicodeViewZ & RangeReplaceableCollection
+> : BidirectionalCollectionWrapper, UnicodeViewZ {
+  public typealias Base = RangeReplaceableBidirectionalSlice<BaseView>
+  public typealias Index = Base.Index
+  public typealias IndexDistance = Base.IndexDistance
+  public typealias Iterator = Base.Iterator
+  public var base: Base
+  public let startIndex: Index
+  public let endIndex: Index
+
+  public func index(atEncodedOffset n: Int64) -> Index {
+    return base.base.index(atEncodedOffset: n)
+  }
+  public static func encodedOffset(of i: Index) -> Int64 {
+    return BaseView.encodedOffset(of: i)
+  }
+  public typealias SubSequence = RangeReplaceableUnicodeViewSlice
+  
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return RangeReplaceableUnicodeViewSlice(
+      base: base, startIndex: bounds.lowerBound, endIndex: bounds.upperBound)
+  }
+  public mutating func replaceSubrange<C: Collection>(
+    _ r: Range<Index>, with replacement: C
+  )
+  where C.Iterator.Element == Iterator.Element {
+    return base.replaceSubrange(r,  with: replacement)
+  }
+}
+
+extension _UnicodeViewZ
+where Self : RangeReplaceableCollection,
+SubSequence == RangeReplaceableUnicodeViewSlice<Self> {
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return RangeReplaceableUnicodeViewSlice(
       base: self, startIndex: bounds.lowerBound, endIndex: bounds.upperBound)
   }
 }
@@ -574,7 +609,7 @@ public protocol Any${Element}UnicodeViewZ_ : AnyUnicodeViewZ_ {
 
 public struct Any${Element}UnicodeViewZ
    : BidirectionalCollection, ForwardingWrapper {
-  public typealias SubSequence = UnicodeViewSlice<Any${Element}UnicodeViewZ>
+  public typealias SubSequence = RangeReplaceableUnicodeViewSlice<Any${Element}UnicodeViewZ>
   public typealias Index = AnyUnicodeIndex
   public typealias IndexDistance = Int64
   public typealias Iterator = Any${Element}Iterator
