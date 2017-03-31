@@ -23,12 +23,41 @@ import StdlibUnittest
 % wrappingParam = 'wrapping'
 % wrappingArg = 'wrapping: '
 
+public struct _UnicodeViews<
+  CodeUnits : RandomAccessCollection,
+  Encoding : UnicodeEncoding
+>
+where Encoding.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element,
+  CodeUnits.SubSequence : RandomAccessCollection,
+  CodeUnits.SubSequence.Index == CodeUnits.Index,
+  CodeUnits.SubSequence.SubSequence == CodeUnits.SubSequence,
+  CodeUnits.SubSequence.Iterator.Element == CodeUnits.Iterator.Element {
+
+  typealias Base = Swift._UnicodeViews<CodeUnits, Encoding>
+  init(_ codeUnits: CodeUnits, _: Encoding.Type = Encoding.self) {
+    base = Swift._UnicodeViews(codeUnits)
+  }
+  typealias FCCNormalizedUTF16View = ZUnicodeViewZ<Base.FCCNormalizedUTF16View>
+  typealias EncodedScalars = ZUnicodeViewZ<Base.EncodedScalars>
+  typealias Scalars = ZUnicodeViewZ<Base.Scalars>
+  typealias CharacterView = ZUnicodeViewZ<Base.CharacterView>
+  var codeUnits: CodeUnits { return base.codeUnits }
+  var fccNormalizedUTF16: FCCNormalizedUTF16View { return ZUnicodeViewZ(base.fccNormalizedUTF16) }
+  var encodedScalars: EncodedScalars { return ZUnicodeViewZ(base.encodedScalars) }
+  var scalars: Scalars { return ZUnicodeViewZ(base.scalars) }
+  var characters: CharacterView { return ZUnicodeViewZ(base.characters) }
+  func transcoded<ToEncoding>(to targetEncoding: ToEncoding.Type) -> ZUnicodeViewZ<_TranscodedView<CodeUnits, Encoding, ToEncoding>>
+  where ToEncoding : UnicodeEncoding {
+    return ZUnicodeViewZ(base.transcoded(to: targetEncoding))
+  }
+  var base: Base
+}
 
 //===----------------------------------------------------------------------===//
 //===----------------------------------------------------------------------===//
 /// Unicode views should conform to this protocol, which supports index
 /// interchange and String type erasure.
-public protocol _UnicodeViewZ : BidirectionalCollection {
+public protocol _UnicodeViewZ : BidirectionalCollection, UnicodeView {
   func index(atEncodedOffset: Int64) -> Index
   static func encodedOffset(of: Index) -> Int64
 }
@@ -53,38 +82,102 @@ public protocol UnicodeViewZ : _UnicodeViewZ {
   associatedtype SubSequence: _UnicodeViewZ = UnicodeViewSlice<Self>
 }
 
-public struct UnicodeViewSlice<Base: _UnicodeViewZ> : UnicodeViewZ {
-  public let base: Base
-  public let startIndex: Base.Index
-  public let endIndex: Base.Index
+public struct UnicodeViewSlice<BaseView: _UnicodeViewZ>
+  : BidirectionalCollectionWrapper, UnicodeViewZ {
+  public typealias Base = BidirectionalSlice<BaseView>
+  public typealias Index = Base.Index
+  public typealias IndexDistance = Base.IndexDistance
+  public typealias Iterator = Base.Iterator
+  public var base: Base
 
+  public init(base: BaseView, bounds: Range<BaseView.Index>) {
+    self.base = Base(base: base, bounds: bounds)
+  }
   public func index(atEncodedOffset n: Int64) -> Index {
-    return base.index(atEncodedOffset: n)
+    return base.base.index(atEncodedOffset: n)
   }
   public static func encodedOffset(of i: Index) -> Int64 {
-    return Base.encodedOffset(of: i)
-  }
-
-  public func index(after i: Index) -> Index { return base.index(after: i) }
-  public func index(before i: Index) -> Index { return base.index(before: i) }
-  public func distance(from i: Index, to j: Index) -> Base.IndexDistance {
-    return base.distance(from: i, to: j)
-  }
-  public func index(i: Index, offsetBy n: Base.IndexDistance) -> Index {
-    return base.index(i, offsetBy: n)
-  }
-  public subscript(i: Index) -> Iterator.Element {
-    return base[i]
+    return BaseView.encodedOffset(of: i)
   }
   public typealias SubSequence = UnicodeViewSlice
-}
-
-extension _UnicodeViewZ where SubSequence == UnicodeViewSlice<Self> {
-  public subscript(bounds: Range<Index>) -> UnicodeViewSlice<Self> {
-    return UnicodeViewSlice(
-      base: self, startIndex: bounds.lowerBound, endIndex: bounds.upperBound)
+  
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: base.base, bounds: bounds)
   }
 }
+
+public struct RandomAccessUnicodeViewSlice<BaseView: _UnicodeViewZ & RandomAccessCollection>
+  : BidirectionalCollectionWrapper, UnicodeViewZ, RandomAccessCollection {
+  public typealias Base = RandomAccessSlice<BaseView>
+  public typealias Index = Base.Index
+  public typealias IndexDistance = Base.IndexDistance
+  public typealias Iterator = Base.Iterator
+  public var base: Base
+
+  init(base: BaseView, bounds: Range<BaseView.Index>) {
+    self.base = Base(base: base, bounds: bounds)
+  }
+  public func index(atEncodedOffset n: Int64) -> Index {
+    return base.base.index(atEncodedOffset: n)
+  }
+  public static func encodedOffset(of i: Index) -> Int64 {
+    return BaseView.encodedOffset(of: i)
+  }
+  public typealias SubSequence = RandomAccessUnicodeViewSlice
+  
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: base.base, bounds: bounds)
+  }
+}
+
+/*
+extension UnicodeViewZ where Self : RangeReplaceableCollection {
+  typealias SubSequence = RangeReplaceableUnicodeViewSlice<Self>
+}
+*/
+
+public struct RangeReplaceableUnicodeViewSlice<
+  BaseView: _UnicodeViewZ & RangeReplaceableCollection
+> : BidirectionalCollectionWrapper, UnicodeViewZ, RangeReplaceableCollection {
+  public typealias Base = RangeReplaceableBidirectionalSlice<BaseView>
+  public typealias Index = Base.Index
+  public typealias IndexDistance = Base.IndexDistance
+  public typealias Iterator = Base.Iterator
+  public var base: Base
+
+  public func index(atEncodedOffset n: Int64) -> Index {
+    return base.base.index(atEncodedOffset: n)
+  }
+  public static func encodedOffset(of i: Index) -> Int64 {
+    return BaseView.encodedOffset(of: i)
+  }
+  public typealias SubSequence = RangeReplaceableUnicodeViewSlice<BaseView>
+  
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: base.base, bounds: bounds)
+  }
+  public mutating func replaceSubrange<C: Collection>(
+    _ r: Range<Index>, with replacement: C
+  )
+  where C.Iterator.Element == Iterator.Element {
+    return base.replaceSubrange(r,  with: replacement)
+  }
+  init(base: BaseView, bounds: Range<BaseView.Index>) {
+    self.base = Base(base: base, bounds: bounds)
+  }
+  
+  public init() {
+    base = Base()
+  }
+  public mutating func _tryToReplaceSubrange<C>(
+    from targetStart: Index, to targetEnd: Index,
+    with replacement: C) -> Bool
+  where C : Collection, C.Iterator.Element == Iterator.Element {
+    return base._tryToReplaceSubrange(
+      from: targetStart, to: targetEnd, with: replacement)
+  }
+}
+
 //===----------------------------------------------------------------------===//
 //===----------------------------------------------------------------------===//
 
@@ -181,7 +274,7 @@ public protocol UnicodeContentZ : AnyUnicodeContentZ {
 extension UnicodeContentZ where UTF16View.Iterator.Element == UTF16.CodeUnit {
   /// Satisfy AnyUnicodeContentZ requirements
   public var anyUTF16: AnyUInt16UnicodeViewZ {
-    return AnyUInt16UnicodeViewZ(utf16)
+    return AnyUInt16UnicodeViewZ(${wrappingArg}utf16)
   }
   public func isLatin1() -> Bool {
     return isKnownLatin1 || !utf16.contains { $0 > 0xFF }
@@ -219,7 +312,7 @@ where
   CodeUnits.SubSequence.SubSequence == CodeUnits.SubSequence,
   CodeUnits.SubSequence.Iterator.Element == CodeUnits.Iterator.Element {
   var characters: _UnicodeViews<CodeUnits,Encoding>.CharacterView {
-    return _UnicodeViews(codeUnits).characters
+    return _UnicodeViews(codeUnits, Encoding.self).characters
   }
 }
 
@@ -249,7 +342,7 @@ where
   CodeUnits.SubSequence.SubSequence == CodeUnits.SubSequence,
   CodeUnits.SubSequence.Iterator.Element == CodeUnits.Iterator.Element {
 
-  var utf8: _TranscodedView<CodeUnits, Encoding, UTF8> {
+  var utf8: ZUnicodeViewZ<_TranscodedView<CodeUnits, Encoding, UTF8>> {
     return _UnicodeViews(
       codeUnits, Encoding.self).transcoded(to: UTF8.self)
   }
@@ -574,7 +667,9 @@ public protocol Any${Element}UnicodeViewZ_ : AnyUnicodeViewZ_ {
 
 public struct Any${Element}UnicodeViewZ
    : BidirectionalCollection, ForwardingWrapper {
-  public typealias SubSequence = UnicodeViewSlice<Any${Element}UnicodeViewZ>
+  public typealias SubSequence = RangeReplaceableUnicodeViewSlice<
+    Any${Element}UnicodeViewZ
+  >
   public typealias Index = AnyUnicodeIndex
   public typealias IndexDistance = Int64
   public typealias Iterator = Any${Element}Iterator
@@ -587,6 +682,10 @@ public struct Any${Element}UnicodeViewZ
   ${gyb.expand(
       '../../stdlib/public/core/ForwardCollectionAPIs.swift.gyb', base='base2',
       element_only=True, Element=Element)}
+
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: self, bounds: bounds)
+  }
   
   // `base` must have exactly this signature to match the needed constrained
   // `ForwardingWrapper` extension, so we compute it and store the more refined
@@ -725,6 +824,13 @@ extension RandomAccessUnicodeViewZ : BidirectionalCollectionWrapper {
 extension RandomAccessUnicodeViewZ : RandomAccessCollection {}
 
 extension RandomAccessUnicodeViewZ : UnicodeViewZ {
+  public typealias SubSequence
+  = RandomAccessUnicodeViewSlice<RandomAccessUnicodeViewZ>
+  
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: self, bounds: bounds)
+  }
+  
   public func index(atEncodedOffset position: Int64) -> Index {
     return Index(base: position^)
   }
@@ -733,7 +839,7 @@ extension RandomAccessUnicodeViewZ : UnicodeViewZ {
   }
 }
 
-extension RandomAccessUnicodeView
+extension RandomAccessUnicodeViewZ
 where Iterator.Element == Base_.Iterator.Element {
   public mutating func _tryToReplaceSubrange<C: Collection>(
     from targetStart: Index, to targetEnd: Index, with replacement: C
@@ -753,13 +859,26 @@ where Iterator.Element == Base_.Iterator.Element {
 }
 //===----------------------------------------------------------------------===//
 
-extension _TranscodedView : UnicodeViewZ {  }
-extension RandomAccessUnicodeView : UnicodeViewZ {  }
-extension _UnicodeViews.FCCNormalizedUTF16View : UnicodeViewZ {}
-extension _UnicodeViews.EncodedScalars : UnicodeViewZ {}
-extension _UnicodeViews.Scalars : UnicodeViewZ {}
-extension _UnicodeViews.CharacterView : UnicodeViewZ {}
+public struct ZUnicodeViewZ<T: UnicodeView> : BidirectionalCollectionWrapper, UnicodeViewZ {
+  public typealias Index = T.Index
+  public typealias IndexDistance = T.IndexDistance
+  public typealias Iterator = T.Iterator
+  public typealias Base = T
+  public var base: Base
 
+  init(_ x: T) { base = x }
+  
+  public func index(atEncodedOffset x: Int64) -> Index {
+    return base.index(atEncodedOffset: x)
+  }
+  public static func encodedOffset(of i: Index) -> Int64 {
+    return Base.encodedOffset(of: i)
+  }
+  public typealias SubSequence = UnicodeViewSlice<ZUnicodeViewZ>
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: self, bounds: bounds)
+  }
+}
 
 //===----------------------------------------------------------------------===//
 extension _SignedInteger {
@@ -1022,15 +1141,14 @@ extension String.Content.Inline${N}or${W} : UnicodeContentZ {
         _utf16.lazy.map {
           UInt8(truncatingBitPattern: $0) }))
     : AnyUInt8UnicodeViewZ(${wrappingArg}
-        _UnicodeViews(_utf16, UTF16.self).transcoded(to: UTF8.self))
+      _UnicodeViews(_utf16, UTF16.self).transcoded(to: UTF8.self))
   }
   
   public var fccNormalizedUTF16: AnyUInt16UnicodeViewZ {
     return bitsPerElement <= 8
     ? AnyUInt16UnicodeViewZ(${wrappingArg}utf16)
     : AnyUInt16UnicodeViewZ(${wrappingArg}
-      _UnicodeViews(_utf16, UTF16.self).fccNormalizedUTF16
-    )
+      _UnicodeViews(_utf16, UTF16.self).fccNormalizedUTF16)
   }
   
   public var characters: AnyCharacterUnicodeViewZ {
@@ -1100,8 +1218,8 @@ extension String.Content.NSStringPayload : UnicodeContentZ {
     return RandomAccessUnicodeViewZ(_utf16)
   }
   
-  public var utf8: _TranscodedView<_NSStringUTF16, UTF16, UTF8> {
-    return _TranscodedView<_NSStringUTF16, UTF16, UTF8>(_utf16)
+  public var utf8: ZUnicodeViewZ<_TranscodedView<_NSStringUTF16, UTF16, UTF8>> {
+    return ZUnicodeViewZ(_TranscodedView<_NSStringUTF16, UTF16, UTF8>(_utf16))
   }
   
   public var fccNormalizedUTF16: AnyUInt16UnicodeViewZ {
@@ -1197,7 +1315,7 @@ extension String.Content : UnicodeContentZ {
   public typealias UTF16View = AnyUInt16UnicodeViewZ
   public var utf16: UTF16View {
     get {
-      ${switch('return UTF16View('+wrappingArg+'x.utf16)')}
+      ${switch('return UTF16View('+wrappingArg+'ZUnicodeViewZ(x.utf16))')}
     }
     set {
       replaceUTF16(utf16.startIndex..<utf16.endIndex, with: newValue)
@@ -1207,7 +1325,7 @@ extension String.Content : UnicodeContentZ {
   public typealias UTF8View = AnyUInt8UnicodeViewZ
   public var utf8: UTF8View {
     get {
-      ${switch('return UTF8View('+wrappingArg+'x.utf8)')}
+      ${switch('return UTF8View('+wrappingArg+'ZUnicodeViewZ(x.utf8))')}
     }
     set {
       // Probably not the most efficient implementation, but it should work.
@@ -1221,7 +1339,7 @@ extension String.Content : UnicodeContentZ {
   public typealias FCCNormalizedUTF16View = AnyUInt16UnicodeViewZ
   public var fccNormalizedUTF16: FCCNormalizedUTF16View {
     get {
-      ${switch('return FCCNormalizedUTF16View('+wrappingArg+'x.fccNormalizedUTF16)')}
+      ${switch('return FCCNormalizedUTF16View('+wrappingArg+'ZUnicodeViewZ(x.fccNormalizedUTF16))')}
     }
     set {
       replaceUTF16(utf16.startIndex..<utf16.endIndex, with: newValue)
@@ -1231,7 +1349,7 @@ extension String.Content : UnicodeContentZ {
   public typealias UnicodeScalarView = AnyUnicodeScalarUnicodeViewZ
   public var unicodeScalars: UnicodeScalarView {
     get {
-      ${switch('return UnicodeScalarView('+wrappingArg+'x.unicodeScalars)')}
+      ${switch('return UnicodeScalarView('+wrappingArg+'ZUnicodeViewZ(x.unicodeScalars))')}
     }
     set {
       replaceUTF16(
@@ -1244,7 +1362,7 @@ extension String.Content : UnicodeContentZ {
   public typealias CharacterView = AnyCharacterUnicodeViewZ
   public var characters: CharacterView {
     get {
-      ${switch('return CharacterView('+wrappingArg+'x.characters)')}
+      ${switch('return CharacterView('+wrappingArg+'ZUnicodeViewZ(x.characters))')}
     }
     set {
       replaceUTF16(
@@ -2073,11 +2191,11 @@ suite.test("ViewValueSemantics") {
 
   // Unwrap the view
   let wrapped = sharesBuffer1.base2 as! AnyUInt16UnicodeViewZ.Adapter<
-    RandomAccessUnicodeView<_UTF16StringStorage>>
+    ZUnicodeViewZ<RandomAccessUnicodeView<_UTF16StringStorage>>>
   
   // Tunnel all the way to the underlying storage, which has reference
   // semantics.  FIXME: there should be no way for the user to do this!
-  var storage: _UTF16StringStorage = wrapped.base.base
+  var storage: _UTF16StringStorage = wrapped.base.base.base
 
   // Make a mutation there, and expect both views to reflect that.
   storage.removeLast(1) 
@@ -2267,12 +2385,12 @@ suite.test("CharacterView") {
   ] // + "👩‍❤️‍👩"
 
   // FIXME: the generic arguments should be deducible, but aren't; <rdar://30323161>
-  let v8 = _UnicodeViews<Array<UInt8>, UTF8>.CharacterView(Array(s.utf8), UTF8.self)
+  let v8 = _UnicodeViews(Array(s.utf8), UTF8.self).characters
   expectEqual(a, Array(v8))
 
   // FIXME: We need to wrap s.utf16 in Array because of <rdar://30386193> Unaccountable link errors
   // FIXME: the generic arguments should be deducible; <rdar://30323161>
-  let v16 = _UnicodeViews<Array<UInt16>, UTF16>.CharacterView(Array(s.utf16), UTF16.self)
+  let v16 = _UnicodeViews(Array(s.utf16), UTF16.self).characters
   expectEqual(a, Array(v16))
 
   expectEqual(v8.reversed(), a.reversed())
@@ -2288,10 +2406,10 @@ suite.test("basic") {
   let s32 = s.unicodeScalars.lazy.map { $0.value }
   let s16 = Array(s.utf16)
   let s8 = Array(s.utf8)
-  let s16to32 = _UnicodeViews.TranscodedView(s16, from: UTF16.self, to: UTF32.self)
-  let s16to8 = _UnicodeViews.TranscodedView(s16, from: UTF16.self, to: UTF8.self)
-  let s8to16 = _UnicodeViews.TranscodedView(s8, from: UTF8.self, to: UTF16.self)
-  let s8Vto16 = _UnicodeViews.TranscodedView(s8, from: ValidUTF8.self, to: UTF16.self)
+  let s16to32 = _UnicodeViews(s16, UTF16.self).transcoded(to: UTF32.self)
+  let s16to8 = _UnicodeViews(s16, UTF16.self).transcoded(to: UTF8.self)
+  let s8to16 = _UnicodeViews(s8, UTF8.self).transcoded(to: UTF16.self)
+  let s8Vto16 = _UnicodeViews(s8, ValidUTF8.self).transcoded(to: UTF16.self)
   expectTrue(s32.elementsEqual(s16to32))
   expectTrue(s8.elementsEqual(s16to8))
   expectTrue(s16.elementsEqual(s8to16))
