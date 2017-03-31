@@ -39,7 +39,7 @@ public protocol UnicodeView : BidirectionalCollection {
 
 extension UnicodeView {
   /// Constructs a copy of other
-  init(_ other: Self) { self = other }
+  public init(_ other: Self) { self = other }
 }
 
 /// A UnicodeView that is already using AnyUnicodeIndex has trivial interchange
