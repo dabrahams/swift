@@ -33,31 +33,31 @@ where Encoding.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element,
   CodeUnits.SubSequence.SubSequence == CodeUnits.SubSequence,
   CodeUnits.SubSequence.Iterator.Element == CodeUnits.Iterator.Element {
 
-  typealias Base = Swift._UnicodeViews<CodeUnits, Encoding>
+  public typealias Base = Swift._UnicodeViews<CodeUnits, Encoding>
   init(_ codeUnits: CodeUnits, _: Encoding.Type = Encoding.self) {
     base = Swift._UnicodeViews(codeUnits)
   }
-  typealias FCCNormalizedUTF16View = ZUnicodeViewZ<Base.FCCNormalizedUTF16View>
-  typealias EncodedScalars = ZUnicodeViewZ<Base.EncodedScalars>
-  typealias Scalars = ZUnicodeViewZ<Base.Scalars>
-  typealias CharacterView = ZUnicodeViewZ<Base.CharacterView>
-  var codeUnits: CodeUnits { return base.codeUnits }
-  var fccNormalizedUTF16: FCCNormalizedUTF16View { return ZUnicodeViewZ(base.fccNormalizedUTF16) }
-  var encodedScalars: EncodedScalars { return ZUnicodeViewZ(base.encodedScalars) }
-  var scalars: Scalars { return ZUnicodeViewZ(base.scalars) }
-  var characters: CharacterView { return ZUnicodeViewZ(base.characters) }
+  public typealias FCCNormalizedUTF16View = ZUnicodeViewZ<Base.FCCNormalizedUTF16View>
+  public typealias EncodedScalars = ZUnicodeViewZ<Base.EncodedScalars>
+  public typealias Scalars = ZUnicodeViewZ<Base.Scalars>
+  public typealias CharacterView = ZUnicodeViewZ<Base.CharacterView>
+  public var codeUnits: CodeUnits { return base.codeUnits }
+  public var fccNormalizedUTF16: FCCNormalizedUTF16View { return ZUnicodeViewZ(base.fccNormalizedUTF16) }
+  public var encodedScalars: EncodedScalars { return ZUnicodeViewZ(base.encodedScalars) }
+  public var scalars: Scalars { return ZUnicodeViewZ(base.scalars) }
+  public var characters: CharacterView { return ZUnicodeViewZ(base.characters) }
   func transcoded<ToEncoding>(to targetEncoding: ToEncoding.Type) -> ZUnicodeViewZ<_TranscodedView<CodeUnits, Encoding, ToEncoding>>
-  where ToEncoding : UnicodeEncoding {
+  {
     return ZUnicodeViewZ(base.transcoded(to: targetEncoding))
   }
-  var base: Base
+  public var base: Base
 }
 
 //===----------------------------------------------------------------------===//
 //===----------------------------------------------------------------------===//
 /// Unicode views should conform to this protocol, which supports index
 /// interchange and String type erasure.
-public protocol _UnicodeViewZ : BidirectionalCollection, UnicodeView {
+public protocol _UnicodeViewZ : UnicodeView {
   func index(atEncodedOffset: Int64) -> Index
   static func encodedOffset(of: Index) -> Int64
 }
@@ -106,6 +106,15 @@ public struct UnicodeViewSlice<BaseView: _UnicodeViewZ>
   }
 }
 
+/*
+extension UnicodeViewZ where Self : RandomAccessCollection {
+  typealias SubSequence = RandomAccessUnicodeViewSlice<Self>
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: self, bounds: bounds)
+  }
+}
+*/
+
 public struct RandomAccessUnicodeViewSlice<BaseView: _UnicodeViewZ & RandomAccessCollection>
   : BidirectionalCollectionWrapper, UnicodeViewZ, RandomAccessCollection {
   public typealias Base = RandomAccessSlice<BaseView>
@@ -133,6 +142,9 @@ public struct RandomAccessUnicodeViewSlice<BaseView: _UnicodeViewZ & RandomAcces
 /*
 extension UnicodeViewZ where Self : RangeReplaceableCollection {
   typealias SubSequence = RangeReplaceableUnicodeViewSlice<Self>
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: self, bounds: bounds)
+  }
 }
 */
 
@@ -177,6 +189,24 @@ public struct RangeReplaceableUnicodeViewSlice<
       from: targetStart, to: targetEnd, with: replacement)
   }
 }
+
+/*
+extension _UnicodeViewZ where SubSequence == UnicodeViewSlice<Self> {
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: self, bounds: bounds)
+  }
+}
+extension _UnicodeViewZ where SubSequence == RandomAccessUnicodeViewSlice<Self> {
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: self, bounds: bounds)
+  }
+}
+extension _UnicodeViewZ where SubSequence == RangeReplaceableUnicodeViewSlice<Self> {
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: self, bounds: bounds)
+  }
+}
+*/
 
 //===----------------------------------------------------------------------===//
 //===----------------------------------------------------------------------===//
@@ -1270,8 +1300,8 @@ extension String : UnicodeZ {
 
   public subscript(bounds: Range<Index>) -> SubSequence {
     get {
-      return SubSequence(base:
-        RangeReplaceableBidirectionalSlice(base: self, bounds: bounds))
+      return SubSequence(
+        base: RangeReplaceableBidirectionalSlice(base: self, bounds: bounds))
     }
     set {
       fatalError("implement me!")
@@ -1688,18 +1718,19 @@ extension ObjectIdentifier {
     }    
   }
 }
-//===--- SubString --------------------------------------------------------===//
+//===--- Substring --------------------------------------------------------===//
 
-
-extension String.SubSequence
+public typealias Substring = String.SubSequence
+extension Substring
   : BidirectionalCollection, BidirectionalCollectionWrapper {
   public typealias Index = Base.Index
   public typealias IndexDistance = Base.IndexDistance
   public typealias Iterator = Base.Iterator
+
+  var _wholeString: String { return base.base }
 }
 
-extension String.SubSequence
-: RangeReplaceableCollection {
+extension Substring : RangeReplaceableCollection {
   public init() { base = Base() }
   
   // FIXME: figure out how to resolve ambiguities when we try to use the default
@@ -1720,67 +1751,56 @@ extension String.SubSequence
   }
 }
 
-/*
-extension String.SubSequence : UnicodeZ {
+extension Substring : UnicodeZ {
   public struct Content {
-    var base: String.Content
+    public typealias Base = Substring.Base
+    var base: Base
   }
   public var content: Content {
-    return base.base.content[base.bounds]
+    return Content(base: base)
   }
 }
 
-public typealias SubString = String.SubSequence
-
-extension SubString.Content : AnyUnicodeContentZ {
-  var isKnownLatin1: Bool { return base.isKnownLatin1 }
-  var isKnownASCII: Bool { return base.isKnownASCII }
-  var isKnownFCCNormalized: Bool { return base.isKnownFCCNormalized }
-  var isKnownFCDForm: Bool { return base.isKnownFCDForm }
-  var isKnownNFDNormalized: Bool { return base.isKnownNFDNormalized }
-  var isKnownNFCNormalized: Bool { return base.isKnownNFCNormalized }
+extension Substring.Content {
+  internal var _wholeContent: String.Content { return base.base.content }
+  internal var _bounds: Range<String.Index> {
+    return base.startIndex..<base.endIndex
+  }
 }
 
-extension SubString.Content : UnicodeContentZ {
-  /// A type that presents the string's UTF-16 code units
-  associatedtype UTF16View : UnicodeViewZ
-  // where Iterator.Element == UInt16
-
-  /// The string's UTF-16 code units.
-  ///
-  /// Note: this view may contain encoding errors, if the underlying encoding is
-  /// UTF16 and the source had encoding errors.
-  var utf16: UTF16View { get }
-
-  /// A type that presents the string's UTF-8 code units
-  associatedtype UTF8View : UnicodeViewZ
-  // where Iterator.Element == UInt8
-
-  /// The string's UTF-8 code units.
-  ///
-  /// Note: this view may contain encoding errors, if the underlying encoding is
-  /// UTF8 and the source had encoding errors.
-  var utf8: UTF8View { get }
-
-  /// A type that presents an FCC-normalized view of the string
-  associatedtype FCCNormalizedUTF16View : UnicodeViewZ
-  // where Iterator.Element == UInt16
-
-  /// An FCC-normalized view of the string
-  var fccNormalizedUTF16: FCCNormalizedUTF16View { get }
-
-  associatedtype CharacterView : UnicodeViewZ
-  // where Iterator.Element == Character
-
-  var characters: CharacterView { get }
-
-  /// A type that presents the string's unicode scalar values
-  associatedtype UnicodeScalarView : UnicodeViewZ
-  // where Iterator.Element == UnicodeScalar
-
-  var unicodeScalars: UnicodeScalarView { get }
+extension Substring.Content : AnyUnicodeContentZ {
+  public var isKnownLatin1: Bool { return _wholeContent.isKnownLatin1 }
+  public var isKnownASCII: Bool { return _wholeContent.isKnownASCII }
+  public var isKnownFCCNormalized: Bool {
+    return _wholeContent.isKnownFCCNormalized
+  }
+  public var isKnownFCDForm: Bool { return _wholeContent.isKnownFCDForm }
+  public var isKnownNFDNormalized: Bool {
+    return _wholeContent.isKnownNFDNormalized
+  }
+  public var isKnownNFCNormalized: Bool {
+    return _wholeContent.isKnownNFCNormalized
+  }
 }
-*/
+
+extension Substring.Content : UnicodeContentZ {
+  public var utf16: String.Content.UTF16View.SubSequence {
+    return _wholeContent.utf16[_bounds]
+  }
+  public var utf8: String.Content.UTF8View.SubSequence {
+    return _wholeContent.utf8[_bounds]
+  }
+  public var fccNormalizedUTF16: String.Content.FCCNormalizedUTF16View.SubSequence {
+    return _wholeContent.fccNormalizedUTF16[_bounds]
+  }
+  public var characters: String.Content.CharacterView.SubSequence {
+    return _wholeContent.characters[_bounds]
+  }
+  public var unicodeScalars: String.Content.UnicodeScalarView.SubSequence {
+    return _wholeContent.unicodeScalars[_bounds]
+  }
+}
+
 //===--- Literal Support --------------------------------------------------===//
 
 extension String : ExpressibleByUnicodeScalarLiteral {
