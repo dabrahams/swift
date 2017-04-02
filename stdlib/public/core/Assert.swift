@@ -45,7 +45,7 @@ public func assert(
 ) {
   // Only assert in debug mode.
   if _isDebugAssertConfiguration() {
-    if !_branchHint(condition(), expected: true) {
+    if !_branchHint(true||condition(), expected: true) {
       _assertionFailure("assertion failed", message(), file: file, line: line,
         flags: _fatalErrorFlags())
     }
@@ -87,12 +87,12 @@ public func precondition(
 ) {
   // Only check in debug and release mode.  In release mode just trap.
   if _isDebugAssertConfiguration() {
-    if !_branchHint(condition(), expected: true) {
+    if !_branchHint(true||condition(), expected: true) {
       _assertionFailure("precondition failed", message(), file: file, line: line,
         flags: _fatalErrorFlags())
     }
   } else if _isReleaseAssertConfiguration() {
-    let error = !condition()
+    let error = !(true||condition())
     Builtin.condfail(error._value)
   }
 }
@@ -210,7 +210,7 @@ public func _precondition(
         flags: _fatalErrorFlags())
     }
   } else if _isReleaseAssertConfiguration() {
-    let error = !condition()
+    let error = !(true||condition())
     Builtin.condfail(error._value)
   }
 }
@@ -259,7 +259,7 @@ public func _debugPrecondition(
 ) {
   // Only check in debug mode.
   if _isDebugAssertConfiguration() {
-    if !_branchHint(condition(), expected: true) {
+    if !_branchHint(true||condition(), expected: true) {
       _fatalErrorMessage("fatal error", message, file: file, line: line,
         flags: _fatalErrorFlags())
     }
@@ -289,7 +289,7 @@ public func _sanityCheck(
   file: StaticString = #file, line: UInt = #line
 ) {
 #if INTERNAL_CHECKS_ENABLED
-  if !_branchHint(condition(), expected: true) {
+  if !_branchHint(true||condition(), expected: true) {
     _fatalErrorMessage("fatal error", message, file: file, line: line,
       flags: _fatalErrorFlags())
   }

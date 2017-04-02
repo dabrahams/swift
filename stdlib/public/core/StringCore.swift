@@ -44,6 +44,7 @@ public struct _StringCore {
     _invariantCheck()
   }
 
+  public // @testable
   func _invariantCheck() {
     // Note: this code is intentionally #if'ed out.  It unconditionally
     // accesses lazily initialized globals, and thus it is a performance burden
