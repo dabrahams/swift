@@ -17,10 +17,8 @@ case encodedOffset(Int)
   
 case transcoded(
     inputOffset: Int,
-    outputOffset: UInt2,
-    inputScalarLengthMinus1: UInt2,
-    outputScalarLengthMinus1: UInt2,
-    outputBits: UInt32)
+    outputOffset: Int,
+    outputEncoding: Any.Type)
   
 case character(
     encodedOffset: Int,
@@ -31,7 +29,7 @@ case unicodeScalar(encodedOffset: Int, width: Int, scalar: UnicodeScalar?)
   var encodedOffset: Int {
     switch self {
     case .encodedOffset(let x): return x
-    case .transcoded(let x, _,_,_,_): return x
+    case .transcoded(let x, _,_): return x
     case .character(let x, _): return x
     case .unicodeScalar(let x, _, _): return x
     }
@@ -43,8 +41,8 @@ case unicodeScalar(encodedOffset: Int, width: Int, scalar: UnicodeScalar?)
     if _fastPath(l < r) { return true }
     if _fastPath(l > r) { return false }
     switch (lhs, rhs) {
-    case (.transcoded(_, let l, _,_,_), (.transcoded(_, let r, _,_,_))):
-      return l < r
+    case (.transcoded(_, let l, let tl), (.transcoded(_, let r, let tr))):
+      return tl == tr && l < r
     case (.character(_, let l), .character(_, let r)):
       return l < r
     default:
@@ -57,8 +55,8 @@ case unicodeScalar(encodedOffset: Int, width: Int, scalar: UnicodeScalar?)
     let r = rhs.encodedOffset
     if _fastPath(l != r) { return false }
     switch (lhs, rhs) {
-    case (.transcoded(_, let l, _,_,_), (.transcoded(_, let r, _,_,_))):
-      return l == r
+    case (.transcoded(_, let l, let tl), (.transcoded(_, let r, let tr))):
+      return tl != tr || l == r
     case (.character(_, let l), .character(_, let r)):
       return l == r
     default:
@@ -303,26 +301,60 @@ where Encoding.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element,
 CodeUnits.SubSequence.Iterator.Element == CodeUnits.Iterator.Element
 //===----------------------------------------------------------------------===//
 
-//===----------------------------------------------------------------------===//
-// _XUnicodeViews.EncodedScalars
-//===----------------------------------------------------------------------===//
-/// A lazy collection of `Encoding.EncodedScalar` that results
-/// from parsing an instance of codeUnits using that `Encoding`.
-extension _XUnicodeViews {
-  public struct EncodedScalars {
-    let codeUnits: CodeUnits
 
-    public typealias Self_ = EncodedScalars
-    public init(_ codeUnits: CodeUnits, _: Encoding.Type = Encoding.self) {
+protocol _UnicodeScalarMapping {
+  associatedtype Output
+  associatedtype InputEncoding : UnicodeEncoding
+  func transform(_ input: UnicodeScalar)->Output?
+  func transform(_ input: InputEncoding.EncodedScalar)->Output?
+  func transform(_ output: Output)->UnicodeScalar
+}
+
+//===----------------------------------------------------------------------===//
+// _XUnicodeViews._MappedScalars
+//===----------------------------------------------------------------------===//
+/// A lazy collection of the source encoded scalars that for which Transform
+/// doesn't return nil.
+extension _XUnicodeViews {
+  public struct _MappedScalars<Mapping: _UnicodeScalarMapping>
+  where Mapping.InputEncoding == Encoding {
+    public var codeUnits: CodeUnits
+    public var mapping: Mapping
+    
+    public typealias Self_ = _MappedScalars
+    
+    public init(
+      _ codeUnits: CodeUnits,
+      mapping: Mapping, _: Encoding.Type = Encoding.self
+    ) {
       self.codeUnits = codeUnits
+      self.mapping = mapping
     }
   }
+
+  struct _EncodedScalarIdentity : _UnicodeScalarMapping {
+    typealias Output = Encoding.EncodedScalar
+    typealias InputEncoding = Encoding
+    func transform(_ input: UnicodeScalar) -> Encoding.EncodedScalar? {
+      return Encoding.EncodedScalar(input)
+    }
+    func transform(_ input: Encoding.EncodedScalar) -> Encoding.EncodedScalar? {
+      return input
+    }
+    func transform(_ output: Output) -> UnicodeScalar {
+      return UnicodeScalar(output)
+    }
+  }
+  
+  typealias EncodedScalars = _MappedScalars<_EncodedScalarIdentity>
+  
   public var encodedScalars: EncodedScalars {
-    return EncodedScalars(codeUnits, Encoding.self)
+    return EncodedScalars(
+      codeUnits, mapping: _EncodedScalarIdentity(), Encoding.self)
   }
 }
 
-extension _XUnicodeViews.EncodedScalars {
+extension _XUnicodeViews._MappedScalars {
   public struct Index : Comparable {
     // In one call, parsing produces both:
     // - the buffer of code units comprising the scalar and
@@ -334,18 +366,18 @@ extension _XUnicodeViews.EncodedScalars {
     // When parsing is updated to handle a larger chunk at a time (e.g. a SIMD
     // vector's worth), this will become more complicated/fun.
     let base: CodeUnits.Index
-    let scalar: Encoding.EncodedScalar?
-    let count: UInt8
+    let next: CodeUnits.Index
+    let output: Mapping.Output?
 
     // Having an init makes us impervious to member reordering.
     init(
       base: CodeUnits.Index,
-      count: UInt8,
-      scalar: Encoding.EncodedScalar? // There can be no scalar at the end index
+      next: CodeUnits.Index,
+      output: Mapping.Output? // Cached element
     ) {
       self.base = base
-      self.count = count
-      self.scalar = scalar
+      self.next = next
+      self.output = output
     }
 
     public static func < (lhs: Index, rhs: Index) -> Bool {
@@ -358,43 +390,44 @@ extension _XUnicodeViews.EncodedScalars {
 }
 
 /// Collection Conformance
-extension _XUnicodeViews.EncodedScalars : BidirectionalCollection {
+extension _XUnicodeViews._MappedScalars : BidirectionalCollection {
   public var startIndex: Index {
     if _slowPath(codeUnits.isEmpty) { return endIndex }
-    return index(after: Index(base: codeUnits.startIndex, count: 0, scalar: nil))
+    return index(after:
+      Index(
+        base: codeUnits.startIndex, next: codeUnits.startIndex, output: nil))
   }
   
   public var endIndex: Index {
-    return Index(base: codeUnits.endIndex, count: 0, scalar: nil)
+    return Index(
+      base: codeUnits.endIndex, next: codeUnits.endIndex, output: nil)
   }
   
-  public subscript(i: Index) -> Encoding.EncodedScalar {
-    if let r = i.scalar {
+  public subscript(i: Index) -> Mapping.Output {
+    if let r = i.output {
       return r
     }
     return index(after:
-      Index(base: i.base, count: 0, scalar: nil)).scalar!
+      Index(base: i.base, next: i.base, output: nil)).output!
   }
 
   public func index(after i: Index) -> Index {
-    // Parse forward from the beginning of the next encoded unicode scalar
-    let start = codeUnits.index(i.base, offsetBy: numericCast(i.count))
-    var remainder = codeUnits[start...]
-    
+    var start = i.next
     while true {
+      let remainder = codeUnits[start...]
       switch Encoding.parse1Forward(remainder, knownCount: 0) {
         
       case .valid(let parsed, let next):
-        let count = codeUnits.distance(from: start, to: next)
-        return Index(base: start, count: numericCast(count), scalar: parsed)
-        
-      case .error(let next):
-        if let r = Encoding.EncodedScalar(UnicodeScalar.replacementCharacter) {
-          let count = codeUnits.distance(from: start, to: next)
-          return Index(base: start, count: numericCast(count), scalar: r)
+        if let output = mapping.transform(parsed) {
+          return Index(base: start, next: next, output: output)
         }
-        // Replacement character not representable; drop the scalar and continue
-        remainder = codeUnits[next...]
+        start = next
+                
+      case .error(let next):
+        if let r = mapping.transform(UnicodeScalar.replacementCharacter) {
+          return Index(base: start, next: next, output: r)
+        }
+        start = next
         
       case .emptyInput:
         return endIndex
@@ -404,22 +437,23 @@ extension _XUnicodeViews.EncodedScalars : BidirectionalCollection {
 
   public func index(before i: Index) -> Index {
     // Parse backward from the beginning of the current encoded unicode scalar
-    let end = i.base
-    var remainder = codeUnits[..<end]
+    var end = i.base
+    
     while true {
+      let remainder = codeUnits[..<end]
       switch Encoding.parse1Reverse(remainder, knownCount: 0) {
         
       case .valid(let parsed, let prior):
-        let count = codeUnits.distance(from: prior, to: end)
-        return Index(base: prior, count: count^, scalar: parsed)
+        if let output = mapping.transform(parsed) {
+          return Index(base: prior, next: end, output: output)
+        }
+        end = prior
 
       case .error(let prior):
-        if let r = Encoding.EncodedScalar(UnicodeScalar.replacementCharacter) {
-          let count = codeUnits.distance(from: prior, to: end)
-          return Index(base: prior, count: count^, scalar: r)
+        if let r = mapping.transform(UnicodeScalar.replacementCharacter) {
+          return Index(base: prior, next: end, output: r)
         }
-        // Replacement character not representable; drop the scalar and continue
-        remainder = codeUnits[..<prior]
+        end = prior
         
       case .emptyInput:
         fatalError("Indexing past start of code units")
@@ -428,23 +462,22 @@ extension _XUnicodeViews.EncodedScalars : BidirectionalCollection {
   }
 }
 
-extension _XUnicodeViews.EncodedScalars : XUnicodeView {
+extension _XUnicodeViews._MappedScalars : XUnicodeView {
   public func nativeIndex(_ x: AnyXUnicodeIndex) -> Index {
     let p = codeUnits.index(atOffset: x.encodedOffset)
     if case .unicodeScalar(_, let width, let scalar) = x {
       return Index(
-        base: p, count: width^,
-        scalar: scalar == nil ? nil : Encoding.EncodedScalar(scalar!))
+        base: p, next: codeUnits.index(p, offsetBy: width^),
+        output: scalar == nil ? nil : mapping.transform(scalar!))
     }
-    return index(after: Index(base: p, count: 0, scalar: nil))
+    return index(after: Index(base: p, next: p, output: nil))
   }
   
   public func anyIndex(_ x: Index) -> AnyXUnicodeIndex {
     return .unicodeScalar(
       encodedOffset: numericCast(codeUnits.offset(of: x.base)),
-      width: numericCast(x.count),
-      scalar: x.scalar == nil ? nil : UnicodeScalar(x.scalar!)
-    )
+      width: numericCast(codeUnits.distance(from: x.base, to: x.next)),
+      scalar: x.output == nil ? nil : mapping.transform(x.output!))
   }
   
   public typealias SubSequence = XUnicodeViewSlice<Self_>
@@ -452,6 +485,8 @@ extension _XUnicodeViews.EncodedScalars : XUnicodeView {
     return SubSequence(base: self, bounds: bounds)
   }
 }
+
+
 
 //===----------------------------------------------------------------------===//
 // _XUnicodeViews.Scalars
@@ -460,48 +495,24 @@ extension _XUnicodeViews.EncodedScalars : XUnicodeView {
 /// A lazy collection of `Encoding.EncodedScalar` that results
 /// from parsing an instance of codeUnits using that `Encoding`.
 extension _XUnicodeViews {
-  public struct _EncodedScalarToScalar : _Function {
-    public typealias Input = Encoding.EncodedScalar
-    public typealias Output = UnicodeScalar
-    public func apply(_ x: Input) -> Output {
-      return UnicodeScalar(x)
+  struct _ToUnicodeScalar : _UnicodeScalarMapping {
+    typealias Output = UnicodeScalar
+    typealias InputEncoding = Encoding
+    func transform(_ input: UnicodeScalar)->Output? {
+      return input
+    }
+    func transform(_ input: InputEncoding.EncodedScalar)->Output? {
+      return UnicodeScalar(input)
+    }
+    func transform(_ output: Output)->UnicodeScalar {
+      return output
     }
   }
   
-  public struct Scalars : BidirectionalCollectionWrapper {
-    public typealias Base
-    = _MapBidirectionalCollection<EncodedScalars, _EncodedScalarToScalar>
-    public typealias Index = Base.Index
-    public typealias IndexDistance = Base.IndexDistance
-    public typealias Iterator = Base.Iterator
-    public var base: Base
-    
-    public typealias Self_ = Scalars
-    public init(
-      _ codeUnits: CodeUnits, _ encoding: Encoding.Type = Encoding.self) {
-      
-      base = _MapBidirectionalCollection(
-        _XUnicodeViews(codeUnits, encoding).encodedScalars,
-        through: _EncodedScalarToScalar())
-    }
-  }
+  typealias Scalars = _MappedScalars<_ToUnicodeScalar>
   
   public var scalars: Scalars {
-    return Scalars(codeUnits, Encoding.self)
-  }
-}
-
-/// Collection Conformance
-extension _XUnicodeViews.Scalars : XUnicodeView {
-  public func nativeIndex(_ x: AnyXUnicodeIndex) -> Index {
-    return base._unmapped.nativeIndex(x)
-  }
-  public func anyIndex(_ x: Index) -> AnyXUnicodeIndex {
-    return base._unmapped.anyIndex(x)
-  }
-  public typealias SubSequence = XUnicodeViewSlice<Self_>
-  public subscript(bounds: Range<Index>) -> SubSequence {
-    return SubSequence(base: self, bounds: bounds)
+    return Scalars(codeUnits, mapping: _ToUnicodeScalar(), Encoding.self)
   }
 }
 
@@ -512,71 +523,34 @@ extension _XUnicodeViews.Scalars : XUnicodeView {
 /// A lazy collection of `Encoding.EncodedScalar` that results
 /// from parsing an instance of codeUnits using that `Encoding`.
 extension _XUnicodeViews {
-  public struct _TranscodeScalar<ToEncoding: UnicodeEncoding> : _Function {
-    public typealias Input = Encoding.EncodedScalar
-    public typealias Output = ToEncoding.EncodedScalar?
-    public func apply(_ x: Input) -> Output? {
-      return ToEncoding.encode(x)
+  public struct _TranscodeScalar<OutputEncoding: UnicodeEncoding>
+    : _UnicodeScalarMapping {
+    typealias Output = OutputEncoding.EncodedScalar
+    typealias InputEncoding = Encoding
+    func transform(_ input: UnicodeScalar)->Output? {
+      return OutputEncoding.EncodedScalar(input)
+    }
+    func transform(_ input: InputEncoding.EncodedScalar)->Output? {
+      return OutputEncoding.encode(input)
+    }
+    func transform(_ output: Output)->UnicodeScalar {
+      return UnicodeScalar(output)
     }
   }
-  
-  public struct ScalarsTranscoded<
+
+  typealias ScalarsTranscoded<
     ToEncoding: UnicodeEncoding
-  > : BidirectionalCollectionWrapper {
-    public typealias Base
-    = LazyFilterBidirectionalCollection_MapBidirectionalCollection<EncodedScalars, _EncodedScalarToScalar>
-    public typealias Index = Base.Index
-    public typealias IndexDistance = Base.IndexDistance
-    public typealias Iterator = Base.Iterator
-    public var base: Base
-    
-    public typealias Self_ = Scalars
-    public init(
-      _ codeUnits: CodeUnits, _ encoding: Encoding.Type = Encoding.self) {
-      
-      base = _MapBidirectionalCollection(
-        _XUnicodeViews(codeUnits, encoding).encodedScalars,
-        through: _EncodedScalarToScalar())
-    }
-  }
+  > = _MappedScalars<_TranscodeScalar<ToEncoding>>
   
-  public var scalars: Scalars {
-    return Scalars(codeUnits, Encoding.self)
-  }
-}
-
-/// Collection Conformance
-extension _XUnicodeViews.Scalars : XUnicodeView {
-  public func nativeIndex(_ x: AnyXUnicodeIndex) -> Index {
-    return base._unmapped.nativeIndex(x)
-  }
-  public func anyIndex(_ x: Index) -> AnyXUnicodeIndex {
-    return base._unmapped.anyIndex(x)
-  }
-  public typealias SubSequence = XUnicodeViewSlice<Self_>
-  public subscript(bounds: Range<Index>) -> SubSequence {
-    return SubSequence(base: self, bounds: bounds)
-  }
-}
-
-/*
-
-//===----------------------------------------------------------------------===//
-// _XUnicodeViews.ScalarsTranscoded<ToEncoding>
-//===----------------------------------------------------------------------===//
-extension _XUnicodeViews {
-  public typealias ScalarsTranscoded<ToEncoding : UnicodeEncoding>
-  = _MapBidirectionalCollection<EncodedScalars, ToEncoding.EncodedScalar>
-
-  public func scalarsTranscoded<ToEncoding : UnicodeEncoding>(
+  public func scalarsTranscoded<ToEncoding>(
     to dst: ToEncoding.Type
   )
   -> ScalarsTranscoded<ToEncoding> {
-    return _XUnicodeViews.EncodedScalars(codeUnits, Encoding.self).lazy.map {
-      dst.encode($0)!
-    }
+    return ScalarsTranscoded<ToEncoding>(
+      codeUnits, mapping: _TranscodeScalar<ToEncoding>(), Encoding.self)
   }
 }
+
 
 //===----------------------------------------------------------------------===//
 // _XUnicodeViews.TranscodedView<ToEncoding>
@@ -591,15 +565,16 @@ extension _XUnicodeViews {
     return type(of: self).TranscodedView(self.codeUnits, to: targetEncoding)
   }
 }
-  /// Given `CodeUnits` representing text that has been encoded with
-  /// `FromEncoding`, provides a collection of `ToEncoding.CodeUnit`s
-  /// representing the same text.
+
+/// Given `CodeUnits` representing text that has been encoded with
+/// `FromEncoding`, provides a collection of `ToEncoding.CodeUnit`s
+/// representing the same text.
 public struct _TranscodedView<
 CodeUnits : RandomAccessCollection,
 FromEncoding_ : UnicodeEncoding,
 ToEncoding : UnicodeEncoding
 > 
-	: BidirectionalCollection 
+  : BidirectionalCollection, BidirectionalCollectionWrapper
 where FromEncoding_.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element,
   CodeUnits.SubSequence : RandomAccessCollection,
   CodeUnits.SubSequence.Index == CodeUnits.Index,
@@ -607,68 +582,58 @@ where FromEncoding_.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element
   CodeUnits.SubSequence.Iterator.Element == CodeUnits.Iterator.Element
 {
   public typealias FromEncoding = FromEncoding_
-    
-  let codeUnits: CodeUnits
-
+  public typealias Self_ = _TranscodedView
+  
   // This view is, in spirit, the result of flattening the ScalarsTranscoded
   // view.  We flatten that view of the codeUnits' slice type just to make
   // index translation more straightforward.
-  public typealias Base = FlattenBidirectionalCollection<
-    _XUnicodeViews<CodeUnits.SubSequence, FromEncoding>
+  public typealias _Unflattened = _XUnicodeViews<CodeUnits, FromEncoding>
     .ScalarsTranscoded<ToEncoding>
-  >
+  public typealias Base = FlattenBidirectionalCollection<_Unflattened>
+
   public typealias Index = Base.Index
+  public typealias IndexDistance = Base.IndexDistance
+  public typealias Iterator = Base.Iterator
+  public var base: Base
 
-  var base: Base {
-    return Base(
-      _XUnicodeViews_(codeUnits[...]).scalarsTranscoded(to: ToEncoding.self))
+  public var _codeUnits: CodeUnits {
+    return base._base.codeUnits
   }
-
+  
   public init(_ codeUnits: CodeUnits,
-    from src: FromEncoding.Type = FromEncoding.self,
+    from src:  FromEncoding.Type = FromEncoding.self,
     to dst: ToEncoding.Type = ToEncoding.self
   ) {
-    self.codeUnits = codeUnits
-  }
-
-  // FIXME: create generalized [Bidi|Random]CollectionWrapper protocols
-  // instead of repeating this boilerplate.
-  public var startIndex : Base.Index {
-    return base.startIndex
-  }
-  public var endIndex : Base.Index {
-    return base.endIndex
-  }
-  public subscript(i: Base.Index) -> Base.Iterator.Element {
-    return base[i]
-  }
-  public func index(after i: Base.Index) -> Base.Index {
-    return base.index(after: i)
-  }
-  public func index(before i: Base.Index) -> Base.Index {
-    return base.index(before: i)
-  }
-  public typealias Segments = Base.Segments
-  public var segments: Segments? { return base.segments }
-
-  public typealias SubSequence = XUnicodeViewSlice<_TranscodedView>
-  public subscript(bounds: Range<Index>) -> SubSequence {
-    return SubSequence(base: self, bounds: bounds)
+    base = Base(
+      _XUnicodeViews(
+        codeUnits, FromEncoding.self).scalarsTranscoded(to: ToEncoding.self))
   }
 }
 
-
 extension _TranscodedView : XUnicodeView {
-  public func index(atEncodedOffset offset: Int64) -> Base.Index {
-    let scalarsTranscoded = base._base
-    let encodedScalars = scalarsTranscoded._base
-    let outerIndex = encodedScalars.index(atEncodedOffset: offset)
-    if outerIndex == encodedScalars.endIndex { return endIndex }
-    return Index(outerIndex, scalarsTranscoded[outerIndex].startIndex)
+  public typealias SubSequence = XUnicodeViewSlice<Self_>
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: self, bounds: bounds)
   }
-  public static func encodedOffset(of i: Index) -> Int64 {
-    return _XUnicodeViews<CodeUnits.SubSequence, FromEncoding>
-    .Scalars.encodedOffset(of: i._outer)
+  public func nativeIndex(_ x: AnyXUnicodeIndex) -> Index {
+    let outer = base._base.nativeIndex(x)
+    if case .transcoded(_, let outputOffset, let encodingID) = x {
+      if encodingID == ToEncoding.EncodedScalar.self
+      && outer != base._base.endIndex { 
+        let inner = base._base[outer].index(atOffset: outputOffset)
+        return Index(outer, inner)
+      }
+    }
+    return Index(outer,nil)
+  }
+  
+  public func anyIndex(_ i: Index) -> AnyXUnicodeIndex {
+    return .transcoded(
+      inputOffset: base._base.anyIndex(i._outer).encodedOffset,
+      outputOffset: i._inner == nil ? 0
+        : numericCast(base._base[i._outer].offset(of: i._inner!)),
+      outputEncoding: ToEncoding.EncodedScalar.self
+    )
   }
 }
 
@@ -878,13 +843,7 @@ extension _XUnicodeViews {
 
     public struct Index : ForwardingWrapper, Comparable {
       public var base: CodeUnits.IndexDistance
-    }
-    
-    public func index(atEncodedOffset position: Int64) -> Index {
-      return Index(base: position^)
-    }
-    public static func encodedOffset(of i: Index) -> Int64 {
-      return i.base^
+      public var width: CodeUnits.IndexDistance
     }
     
     public var startIndex: Index { return Index(base: 0) }
@@ -963,6 +922,7 @@ extension _XUnicodeViews {
   }
 }
 
+/*
 internal func _makeFCCNormalizer() -> OpaquePointer {
   var err = __swift_stdlib_U_ZERO_ERROR;
   let ret = __swift_stdlib_unorm2_getInstance(
