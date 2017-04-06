@@ -831,10 +831,10 @@ extension _XUnicodeViews {
   public struct CharacterView : XUnicodeView {
 
     public init(_ codeUnits: CodeUnits, _: Encoding.Type = Encoding.self) {
-      self.storage = _XUnicodeViews(codeUnits)
+      self.codeUnits = codeUnits
     }
 
-    internal let storage: _XUnicodeViews
+    internal let codeUnits: CodeUnits
 
     public typealias SubSequence = XUnicodeViewSlice<CharacterView>
     public subscript(bounds: Range<Index>) -> SubSequence {
@@ -842,78 +842,107 @@ extension _XUnicodeViews {
     }
 
     public struct Index : ForwardingWrapper, Comparable {
-      public var base: CodeUnits.IndexDistance
-      public var width: CodeUnits.IndexDistance
+      public var base: CodeUnits.Index
+      public var next: CodeUnits.Index
     }
     
-    public var startIndex: Index { return Index(base: 0) }
+    public var startIndex: Index {
+      let baseStart = codeUnits.startIndex
+      var r = Index(base: baseStart, next: baseStart)
+      if !codeUnits.isEmpty { formIndex(after: &r) }
+      return r
+    }
+    
     public var endIndex: Index {
-      return Index(base: storage.codeUnits.count)
+      return Index(base: codeUnits.endIndex, next: codeUnits.endIndex)
     }
 
+    public func nativeIndex(_ i: AnyXUnicodeIndex) -> Index {
+      let p = codeUnits.index(atOffset: i.encodedOffset)
+      if case .character(_, let width) = i {
+        return Index(base: p, next: codeUnits.index(p, offsetBy: width^))
+      }
+      return index(after: Index(base: p, next: p))
+    }
+    
+    public func anyIndex(_ i: Index) -> AnyXUnicodeIndex {
+      return .character(
+        encodedOffset: codeUnits.offset(of: i.base)^,
+        width: codeUnits.distance(from: i.base, to: i.next)^)
+    }
+    
     public subscript(i: Index) -> Character {
-      let j = index(after: i)
-      let contents = _XUnicodeViews_(
-        storage.codeUnits[
-          storage.codeUnits.index(atOffset: i.base)
-          ..< storage.codeUnits.index(atOffset: j.base)],
-        Encoding.self)
-        
-      if let small = Character(_smallUtf8: contents.transcoded(to: UTF8.self)) {
-        return small
-      }
-      else {
-        // FIXME: there is undoubtley a less ridiculous way to do this
-        let scalars = contents.encodedScalars.lazy.map(UnicodeScalar.init)
-        let string = Swift.String(Swift.String.UnicodeScalarView(scalars))
-        return Character(_largeRepresentationString: string)
-      }
+      return Character(_codeUnits: codeUnits[i.base..<i.next], Encoding.self)
     }     
 
     public func index(after i: Index) -> Index {
-      // FIXME: there is always a grapheme break between two scalars that are
-      // both < U+0300.  Use that to optimize.  Can we make a stronger
-      // statement, that there's always a break before any scalar < U+0300?
-      // _debugLog("index(after: \(i))")
-      let nextOffset = _withUBreakIterator {
-        __swift_stdlib_ubrk_following($0, i.base^)
+      // If the next two scalar values are both < 0x300, we can bypass ICU.
+      let u32 = _UnicodeViews(
+        codeUnits[i.next...], Encoding.self).transcoded(to: UTF32.self)
+      
+      guard let s0 = u32.first else { return Index(base: i.next, next: i.next) }
+      if _fastPath(s0 < 0x300) {
+        // If we are out of scalars we can pretend the next one is zero
+        let s1 = u32.dropFirst().first ?? 0 
+        if _fastPath(s1 < 0x300) {
+          let width = (s0, s1) == (13, 10) ? 2 : 1
+          return Index(
+            base: i.next, next: codeUnits.index(i.next, offsetBy: width^))
+        }
       }
-      // _debugLog("  index(after: \(i)): \(nextOffset)")
-      return Index(base: nextOffset^)
+      
+      let k = codeUnits.offset(of: i.next)
+      let nextOffset = _withUBreakIterator {
+        __swift_stdlib_ubrk_following($0, k^)
+      }
+      return Index(
+        base: i.next, next: codeUnits.index(i.base, offsetBy: nextOffset^))
     }
 
     public func index(before i: Index) -> Index {
+      // If the previous two scalar values are both < 0x300, we can bypass ICU.
+      let u32 = _UnicodeViews(
+        codeUnits[..<i.base], Encoding.self).transcoded(to: UTF32.self)
+      
+      guard let s1 = u32.last else {
+        return Index(base: codeUnits.startIndex, next: i.base)
+      }
+      if _fastPath(s1 < 0x300) {
+        // If we are out of scalars we can pretend the previous one is zero
+        let s0 = u32.dropLast().last ?? 0 
+        if _fastPath(s0 < 0x300) {
+          let width = (s0, s1) == (13, 10) ? 2 : 1
+          return Index(
+            base: i.next, next: codeUnits.index(i.next, offsetBy: -width^))
+        }
+      }
+      
+      let k = codeUnits.offset(of: i.base)
+      
       // FIXME: there is always a grapheme break between two scalars that are
       // both < U+0300.  Use that to optimize.  Can we make a stronger
       // statement, that there's always a break before any scalar < U+0300?
-      // _debugLog("index(before: \(i))")
       let previousOffset = _withUBreakIterator {
-        __swift_stdlib_ubrk_preceding($0, i.base^)
+        __swift_stdlib_ubrk_preceding($0, k^)
       }
-      // _debugLog("  -> \(previousOffset)")
-      return Index(base: previousOffset^)
+      return Index(
+        base: codeUnits.index(atOffset: previousOffset), next: i.base)
     }
     
     internal func _withUBreakIterator<R>(_ body: (OpaquePointer)->R) -> R {
       var err = __swift_stdlib_U_ZERO_ERROR;
 
-      // _debugLog("ubrk_open")
       let bi = __swift_stdlib_ubrk_open(
         /*type:*/ __swift_stdlib_UBRK_CHARACTER, /*locale:*/ nil,
         /*text:*/ nil, /*textLength:*/ 0, /*status:*/ &err)
       _precondition(err.isSuccess, "unexpected ubrk_open failure")
       defer { __swift_stdlib_ubrk_close(bi) }
 
-      fatalError()
-      /*
-      return storage._withUText { u in
-        // _debugLog("ubrk_setUText(breakIterator: \(bi), u: \(u)")
-        // _debugLog("u: \(u.pointee)")
+      return _UnicodeViews(codeUnits, Encoding.self)._withUText { u in
         __swift_stdlib_ubrk_setUText(bi, u, &err)
         _precondition(err.isSuccess, "unexpected ubrk_setUText failure")
         return body(bi)
       }
-      */
     }  
   }
 
@@ -921,18 +950,6 @@ extension _XUnicodeViews {
     return CharacterView(codeUnits, Encoding.self)
   }
 }
-
-/*
-internal func _makeFCCNormalizer() -> OpaquePointer {
-  var err = __swift_stdlib_U_ZERO_ERROR;
-  let ret = __swift_stdlib_unorm2_getInstance(
-    nil, "nfc", __swift_stdlib_UNORM2_COMPOSE_CONTIGUOUS, &err)
-  _precondition(err.isSuccess, "unexpected unorm2_getInstance failure")
-  return ret!
-}
-
-// Michael NOTE: made public for prototype, should be internal
-public var _fccNormalizer = _makeFCCNormalizer()
 
 extension _XUnicodeViews {
   /// Invokes `body` on a contiguous buffer of our UTF16.
@@ -951,4 +968,376 @@ extension _XUnicodeViews {
     return Array(self.transcoded(to: UTF16.self)).withUnsafeBufferPointer(body)
   }
 }
-*/
+
+
+//===----------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
+
+// A normalization segment that is FCC-normalized. This is a collection of
+// normalized UTF16 code units.
+//
+// Note that this is not a XUnicodeView. Indices into a normalized segment are
+// not native indices, and do not necessarily correspond to any particular code
+// unit as they may of undergone composition or decomposition, which in turn may
+// also re-order code units. Thus, FCCNormalizedSegments are not suitable for
+// queries needing sub-segment granularity. However, FCCNormalizedSegments are
+// suitable for segment-level-or-coarser granularity queries, which include any
+// grapheme-level queries as segments are sub- grapheme.
+//
+// TODO: verify above statement about segments being sub-grapheme, that is make
+// sure it is not possible to have segments span graphemes.
+//
+// TODO: Explore coalescing small segments together
+public struct FCCNormalizedSegment : BidirectionalCollection {
+  let buffer: UTF16CodeUnitBuffer
+
+  public init(_ buffer: UTF16CodeUnitBuffer) {
+    self.buffer = buffer
+  }
+  public init() {
+    self.buffer = UTF16CodeUnitBuffer()
+  }
+
+  public typealias Index = Int // UTF16CodeUnitBuffer.Index
+
+  public var startIndex : Index {
+    return buffer.startIndex
+  }
+  public var endIndex : Index {
+    return buffer.endIndex
+  }
+  public subscript(i: Index) -> UInt16 {
+    return buffer[i]
+  }
+  public func index(after i: Index) -> Index {
+    return buffer.index(after: i)
+  }
+  public func index(before i: Index) -> Index {
+    return buffer.index(before: i)
+  }
+  public typealias SubSequence = BidirectionalSlice<FCCNormalizedSegment>
+}
+
+// Ask ICU if the given unicode scalar value has a normalization boundary before
+// it, that is it begins a new normalization segment.
+public func _hasBoundary(before value: UInt32) -> Bool {
+  return __swift_stdlib_unorm2_hasBoundaryBefore(_fccNormalizer, value) != 0
+}
+
+// TODO: explore using hasBoundary(after:), and whether that will identify
+// finer-grained segments.
+
+public struct FCCNormalizedLazySegments<
+  CodeUnits : RandomAccessCollection,
+  FromEncoding : UnicodeEncoding
+>
+where
+  CodeUnits.Index == CodeUnits.SubSequence.Index,
+  CodeUnits.SubSequence : RandomAccessCollection,
+  CodeUnits.SubSequence == CodeUnits.SubSequence.SubSequence,
+  CodeUnits.Iterator.Element == CodeUnits.SubSequence.Iterator.Element,
+  CodeUnits.Iterator.Element == FromEncoding.EncodedScalar.Iterator.Element
+{
+  let codeUnits: CodeUnits
+
+  public init(
+    _ codeUnits: CodeUnits,
+    _: FromEncoding.Type = FromEncoding.self
+  ) {
+    self.codeUnits = codeUnits
+  }
+
+  public init(_ unicodeView: _XUnicodeViews<CodeUnits, FromEncoding>) {
+    self.init(unicodeView.codeUnits)
+  }
+
+  // Find the segment that terminates at `endingAt`. Optimized for backwards
+  // traversal.
+  internal func priorSegment(
+    endingAt end: CodeUnits.Index
+  ) -> Index {
+    precondition(end != codeUnits.startIndex)
+
+    // Decode scalars backwards, including them until we after we find one that
+    // has a boundary before it (and include that one).
+    var start = end
+    while start != codeUnits.startIndex {
+      // Include this scalar
+      let (scalarValue: value, startIndex: scalarStart, e)
+        = decodeOne(priorTo: start)
+      _sanityCheck(e == start, "Internal inconsistency in decodeOne")
+
+      // Include this scalar
+      start = scalarStart
+
+      if _hasBoundary(before: value) {
+        // We're done
+        break
+      }
+    }
+
+    return Index(
+      nativeOffset: codeUnits.distance(
+        from: codeUnits.startIndex, to: start
+      ),
+      nativeCount: codeUnits.distance(from: start, to: end),
+      segment: formSegment(from: start, until: end)
+    )
+  }
+
+  // Find the segment that starts with `startingAt`. Optimized for forwards
+  // traversal.
+  internal func nextSegment(
+    startingAt start: CodeUnits.Index
+  ) -> Index {
+    if start == codeUnits.endIndex {
+      return endIndex
+    }
+
+    // Parse the first scalar, it will always be in the segment
+    var (scalarValue: value, startIndex: s, endIndex: end)
+      = decodeOne(from: start)
+    _sanityCheck(start == codeUnits.startIndex || 
+                 _hasBoundary(before: value), "Not on segment boundary")
+    _sanityCheck(s == start, "Internal inconsistency in decodeOne")
+
+    // Include any subsequent scalars that don't have boundaries before them
+    while end != codeUnits.endIndex {
+      let (scalarValue: value, startIndex: s, endIndex: scalarEnd)
+        = decodeOne(from: end)
+      _sanityCheck(s == end, "Internal inconsistency in decodeOne")
+
+      if _hasBoundary(before: value) {
+        // Exclude this scalar
+        break
+      }
+
+      // Include this scalar
+      end = scalarEnd
+    }
+
+    return Index(
+      nativeOffset: codeUnits.distance(
+        from: codeUnits.startIndex, to: start
+      ),
+      nativeCount: codeUnits.distance(from: start, to: end),
+      segment: formSegment(from: start, until: end)
+    )
+  }
+
+  // Normalize a segment. Indices must be on scalar boundaries.
+  internal func formSegment(
+    from start: CodeUnits.Index,
+    until end: CodeUnits.Index
+  ) -> FCCNormalizedSegment {
+    precondition(start != end, "TODO: should we just have empty segment?")
+
+    let utf16CodeUnits = unicodeView(
+      from: start, until: end
+    ).scalarsTranscoded(
+      to: UTF16.self
+    )
+
+    // TODO: Find way to re-use the storage, maybe iterator pattern?
+    var buffer = UTF16CodeUnitBuffer(utf16CodeUnits.lazy.joined())
+
+    // TODO: fast pre-normalized checks (worth doing before calling over to
+    //       ICU)
+
+    _sanityCheck(buffer.count > 0, "How did this happen? Failed precondition?")
+
+    // Ask ICU to normalize
+    //
+    // FIXME: withMutableArray kind of defeats the purpose of the small
+    // buffer :-(
+    buffer.withMutableArray { (array: inout [UInt16]) -> () in
+      array.withUnsafeBufferPointer {
+        // TODO: Just reserving one or two extra up front. If we're segment-
+        // based, should be finite number of possible decomps.
+        let originalCount = buffer.count
+        while true {
+          var error = __swift_stdlib_U_ZERO_ERROR
+          let usedCount = __swift_stdlib_unorm2_normalize(
+            // FIXME: check valid force-unwrap
+            _fccNormalizer, $0.baseAddress!, numericCast($0.count),
+            &array, numericCast(array.count), &error)
+          if __swift_stdlib_U_SUCCESS(error) {
+            array.removeLast(array.count - numericCast(usedCount))
+            return
+          }
+          _sanityCheck(
+            error == __swift_stdlib_U_BUFFER_OVERFLOW_ERROR,
+            "Unknown normalization error")
+
+          // Maximum number of NFC to FCC decompositions for a single unicode
+          // scalar value
+          //
+          // TODO: what is this really? Should be much less
+          let maxDecompSize = 8
+
+          // Very loose canary to check that we haven't grown exceedingly large
+          // (indicative of logic error). Loose by assuming that every original
+          // character could be decomposed the maximum number of times. Without
+          // this, an error would loop until we run out of memory or the array
+          // is larger than 2^32 on 64bit platforms.
+          _sanityCheck(buffer.count < originalCount*maxDecompSize)
+
+          // extend array storage by 25%
+          array.append(
+            contentsOf: repeatElement(0, count: (array.count + 3) >> 2))
+        }
+      }
+    }
+
+    return FCCNormalizedSegment(buffer)
+  }
+
+
+  // Decode one or more code units, returning the unicode scalar value and the
+  // indices spanning the code units parsed. `from` should be on scalar boundary
+  internal func decodeOne(from start: CodeUnits.Index)
+    -> (scalarValue: UInt32,
+        startIndex: CodeUnits.Index,
+        endIndex: CodeUnits.Index) {
+    precondition(start != codeUnits.endIndex, "Given empty slice")
+
+    let encodedScalar = unicodeView(from: start).encodedScalars.first!
+    return (scalarValue: encodedScalar.utf32[0],
+            startIndex: start,
+            endIndex: codeUnits.index(start, offsetBy: numericCast(encodedScalar.count)))
+  }
+
+  // As decodeOne(from:), but in reverse. `priorTo` is the index after the last
+  // code unit in the scalar, i.e. it is exclusive.
+  internal func decodeOne(priorTo end: CodeUnits.Index)
+    -> (scalarValue: UInt32,
+        startIndex: CodeUnits.Index,
+        endIndex: CodeUnits.Index) {
+    precondition(end != codeUnits.startIndex, "Given empty slice")
+
+    let encodedScalar = unicodeView(until: end).encodedScalars.last!
+    return (scalarValue: encodedScalar.utf32[0],
+            startIndex: codeUnits.index(end, offsetBy: -numericCast(encodedScalar.count)),
+            endIndex: end)
+  }
+
+  // Get the rest of the XUnicode view
+  internal func unicodeView(
+    from start: CodeUnits.Index? = nil,
+    until end: CodeUnits.Index? = nil
+  ) -> _XUnicodeViews<CodeUnits.SubSequence, FromEncoding> {
+    let end = end ?? codeUnits.endIndex
+    let start = start ?? codeUnits.startIndex
+    return _XUnicodeViews(codeUnits[start..<end], FromEncoding.self)
+  }
+}
+
+extension FCCNormalizedLazySegments : BidirectionalCollection {
+  // TODO?: This is really more like an iterator...
+  public struct Index : Comparable {
+    // The corresponding native begin/end indices for this segment
+    let nativeOffset: CodeUnits.IndexDistance
+    let nativeCount: CodeUnits.IndexDistance
+    let segment: FCCNormalizedSegment
+
+    public static func <(lhs: Index, rhs: Index) -> Bool {
+      if lhs.nativeOffset < rhs.nativeOffset {
+        // Our ends should be ordered similarly, unless lhs is the last index
+        // before endIndex and rhs is the endIndex.
+        _sanityCheck(
+          lhs.nativeOffset + lhs.nativeCount 
+            < rhs.nativeOffset + rhs.nativeCount ||
+          rhs.nativeCount == 0,
+          "overlapping segments?")
+
+        return true
+      }
+
+      return false
+    }
+
+    public static func ==(lhs: Index, rhs: Index) -> Bool {
+
+      if lhs.nativeOffset == rhs.nativeOffset {
+        _sanityCheck(
+          lhs.nativeCount == rhs.nativeCount,
+          "overlapping segments?")
+
+        return true
+      }
+
+      return false
+    }
+  }
+
+  // TODO: formIndex(after:) that re-uses storage
+
+  public var startIndex: Index {
+    return nextSegment(startingAt: codeUnits.startIndex)
+  }
+  public var endIndex: Index {
+    return Index(
+      nativeOffset: codeUnits.count,
+      nativeCount: 0,
+      segment: FCCNormalizedSegment()
+    )
+  }
+
+  public func index(after idx: Index) -> Index {
+    return nextSegment(
+      startingAt: codeUnits.index(atOffset: idx.nativeOffset + idx.nativeCount)
+    )
+  }
+  public func index(before idx: Index) -> Index {
+    return priorSegment(
+      endingAt: codeUnits.index(atOffset: idx.nativeOffset)
+    )
+  }
+  public subscript(position: Index) -> FCCNormalizedSegment {
+    return position.segment
+  }
+
+  public typealias SubSequence = BidirectionalSlice<FCCNormalizedLazySegments>
+}
+
+extension _XUnicodeViews {
+  public struct FCCNormalizedUTF16View: BidirectionalCollectionWrapper {
+    public typealias Base = FlattenBidirectionalCollection<
+      FCCNormalizedLazySegments<CodeUnits, Encoding>
+    >
+    public var base: Base
+    public typealias Index = Base.Index
+    public typealias IndexDistance = Base.IndexDistance
+    public typealias Self_ = FCCNormalizedUTF16View
+    
+    public init(_ unicodeView: _XUnicodeViews<CodeUnits, Encoding>) {
+      self.base = Base(FCCNormalizedLazySegments(unicodeView))
+    }
+  }
+
+  public var fccNormalizedUTF16: FCCNormalizedUTF16View {
+    return FCCNormalizedUTF16View(self)
+  }
+}
+
+extension _XUnicodeViews.FCCNormalizedUTF16View : XUnicodeView {
+  public func nativeIndex(_ i: AnyXUnicodeIndex) -> Index {
+    let segmentIdx = base._base.nextSegment(
+      startingAt: base._base.codeUnits.index(
+        base._base.codeUnits.startIndex,
+        offsetBy: numericCast(i.encodedOffset)
+      )
+    )
+    return Index(segmentIdx, segmentIdx.segment.startIndex)
+  }
+  
+  public func anyIndex(_ i: Index) -> AnyXUnicodeIndex {
+    return .encodedOffset(numericCast(i._outer.nativeOffset))
+  }
+  
+  public typealias SubSequence = XUnicodeViewSlice<Self_>
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: self, bounds: bounds)
+  }
+}
+
