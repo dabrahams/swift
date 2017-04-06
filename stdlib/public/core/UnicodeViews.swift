@@ -668,7 +668,7 @@ extension _UnicodeViews : _UTextable {
   }
 }
 
-extension _UnicodeViews {
+extension _UnicodeViews where CodeUnits.Iterator.Element : UnsignedInteger {
   
   public struct CharacterView : UnicodeView {
 
@@ -701,21 +701,23 @@ extension _UnicodeViews {
 
     public subscript(i: Index) -> Character {
       let j = index(after: i)
-      let contents = _UnicodeViews_(
-        storage.codeUnits[
+
+      let source = storage.codeUnits[
           storage.codeUnits.index(atOffset: i.base)
-          ..< storage.codeUnits.index(atOffset: j.base)],
-        Encoding.self)
-        
-      if let small = Character(_smallUtf8: contents.transcoded(to: UTF8.self)) {
-        return small
+        ..< storage.codeUnits.index(atOffset: j.base)]
+      
+      if _fastPath(
+        Encoding.self == Latin1.self
+        || Encoding.EncodedScalar.self == UTF16.EncodedScalar.self
+      ) {
+        return Character(
+          _utf16: storage.codeUnits.lazy.map
+          { numericCast($0) as UTF16.CodeUnit })
       }
-      else {
-        // FIXME: there is undoubtley a less ridiculous way to do this
-        let scalars = contents.encodedScalars.lazy.map(UnicodeScalar.init)
-        let string = Swift.String(Swift.String.UnicodeScalarView(scalars))
-        return Character(_largeRepresentationString: string)
-      }
+
+      return Character(
+        _utf16: _UnicodeViews_(source, Encoding.self).transcoded(to: UTF16.self)
+      )
     }     
 
     public func index(after i: Index) -> Index {

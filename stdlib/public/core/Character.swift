@@ -64,6 +64,8 @@ public struct Character :
   _ExpressibleByBuiltinExtendedGraphemeClusterLiteral,
   ExpressibleByExtendedGraphemeClusterLiteral, Hashable {
 
+  internal typealias Packed = PackedUnsignedIntegers<UInt63, UInt16>
+  
   // Fundamentally, it is just a String, but it is optimized for the
   // common case where the UTF-8 representation fits in 63 bits.  The
   // remaining bit is used to discriminate between small and large
@@ -76,7 +78,6 @@ public struct Character :
   internal enum Representation {
   case large(_UTF16StringStorage)
   case small(UInt63)
-    public typealias Packed = PackedUnsignedIntegers<UInt63, UInt16>
   }
 
   /// Creates a character containing the given Unicode scalar value.
@@ -89,7 +90,7 @@ public struct Character :
 
   @effects(readonly)
   public init(_builtinUnicodeScalarLiteral value: Builtin.Int32) {
-    self.init(UnicodeScalar(_unchecked: value))
+    self.init(UnicodeScalar(_unchecked: UInt32(value)))
   }
 
   /// Creates a character with the specified value.
@@ -114,20 +115,19 @@ public struct Character :
     isASCII: Builtin.Int1
   ) {
     let utf8 = UnsafeBufferPointer(
-      start: UnsafePointer<UTF8.CodeUnit>(start), Int(utf8CodeUnitCount))
+      start: UnsafePointer<UTF8.CodeUnit>(start), count: Int(utf8CodeUnitCount))
     let utf16 = _UnicodeViews(utf8, ValidUTF8.self).transcoded(to: UTF16.self)
     self.init(_utf16: utf16)
   }
 
   public init<C: Collection>(_utf16: C)
   where C.Iterator.Element == UTF16.CodeUnit {
-    if let small = Packed(utf16, bitsPerCodeUnit: 16) {
+    if let small = Packed(_utf16, bitsPerElement: 16) {
       _representation = .small(small.representation)
     }
     else {
-      _representation = .large(_UTF16StringStorage(utf16))
+      _representation = .large(_UTF16StringStorage(_utf16))
     }
-    
   }
   
   /// Creates a character with the specified value.
@@ -189,18 +189,18 @@ public struct Character :
     
     public var endIndex: Int {
       switch representation {
-      case small(let r):
+      case .small(let r):
         return Packed(representation: r, bitsPerElement: 16).count
-      case large(let r):
+      case .large(let r):
         return r.count
       }
     }
 
     public subscript(i: Int) -> UTF16.CodeUnit {
       switch representation {
-      case small(let r):
+      case .small(let r):
         return Packed(representation: r, bitsPerElement: 16)[i]
-      case large(let r):
+      case .large(let r):
         return r[i]
       }
     }
@@ -209,7 +209,7 @@ public struct Character :
   }
         
   public var utf16: UTF16View {
-    return UTF16View(representation: representation)
+    return UTF16View(representation: _representation)
   }
 
   @_versioned
@@ -218,7 +218,7 @@ public struct Character :
 
 extension Character : CustomStringConvertible {
   public var description: String {
-    return String(describing: self)
+    return String(self)
   }
 }
 
@@ -237,76 +237,42 @@ extension String {
   /// - Parameter c: The character to convert to a string.
   public init(_ c: Character) {
     switch c._representation {
-    case let .small(_63bits):
-      let value = Character._smallValue(_63bits)
-      let smallUTF8 = Character._SmallUTF8(value)
-      self = String._fromWellFormedCodeUnitSequence(
-        UTF8.self, input: smallUTF8)
-    case let .large(value):
-      self.content = String.Content(utf16: value)
+    case .small:
+      self.init(content: Content(utf16: c.utf16))
+    case let .large(u16):
+      self.init(content: Content(.utf16(u16)))
     }
-  }
-}
-
-/// `.small` characters are stored in an Int63 with their UTF-8 representation,
-/// with any unused bytes set to 0xFF. ASCII characters will have all bytes set
-/// to 0xFF except for the lowest byte, which will store the ASCII value. Since
-/// 0x7FFFFFFFFFFFFF80 or greater is an invalid UTF-8 sequence, we know if a
-/// value is ASCII by checking if it is greater than or equal to
-/// 0x7FFFFFFFFFFFFF00.
-internal var _minASCIICharReprBuiltin: Builtin.Int63 {
-  @inline(__always) get {
-    let x: Int64 = 0x7FFFFFFFFFFFFF00
-    return Builtin.truncOrBitCast_Int64_Int63(x._value)
   }
 }
 
 extension Character : Equatable {
   public static func == (lhs: Character, rhs: Character) -> Bool {
-    switch (lhs._representation, rhs._representation) {
-    case let (.small(lbits), .small(rbits)) where
-      Bool(Builtin.cmp_uge_Int63(lbits, _minASCIICharReprBuiltin))
-      && Bool(Builtin.cmp_uge_Int63(rbits, _minASCIICharReprBuiltin)):
-      return Bool(Builtin.cmp_eq_Int63(lbits, rbits))
-    default:
-      // FIXME(performance): constructing two temporary strings is extremely
-      // wasteful and inefficient.
-      return String(lhs) == String(rhs)
+    // If both are Latin-1 there's no need to normalize
+    if (
+      !lhs.utf16.contains { $0 > 0xFF }
+      && !rhs.utf16.contains { $0 > 0xFF }) {
+      return lhs.utf16.elementsEqual(rhs.utf16)
     }
+    return String(lhs) == String(rhs)
   }
 }
 
 extension Character : Comparable {
   public static func < (lhs: Character, rhs: Character) -> Bool {
-    switch (lhs._representation, rhs._representation) {
-    case let (.small(lbits), .small(rbits)) where
-      // Note: This is consistent with Foundation but unicode incorrect.
-      // See String._compareASCII.
-      Bool(Builtin.cmp_uge_Int63(lbits, _minASCIICharReprBuiltin))
-      && Bool(Builtin.cmp_uge_Int63(rbits, _minASCIICharReprBuiltin)):
-      return Bool(Builtin.cmp_ult_Int63(lbits, rbits))
-    default:
-      // FIXME(performance): constructing two temporary strings is extremely
-      // wasteful and inefficient.
-      return String(lhs) < String(rhs)
+    // If both are Latin-1 there's no need to normalize
+    if (
+      !lhs.utf16.contains { $0 > 0xFF }
+      && !rhs.utf16.contains { $0 > 0xFF }) {
+      return lhs.utf16.lexicographicallyPrecedes(rhs.utf16)
     }
+    return String(lhs) < String(rhs)
   }
 }
 
 extension Character {
-  // public init<S: Sequence>(_ scalars: S) where S.Iterator.Element == UnicodeScalar {
-  //   // FIXME: Horribly inefficient, but the stuff to make it fast is private.
-  //   // FIXME: Also, constructing "👩‍❤️‍👩" is foiled by precondition checks
-  //   let string = String(String.UnicodeScalarView(scalars))
-  //   // TBD: failable initializer, precondition, or neither?
-  //   assert(string.characters.count == 1)
-  //   self = string.first!
-  // }
-  
-  // FIXME: Horribly inefficient, but the stuff to make it fast is private.
-  // TBD: set or get-only?
-  public var unicodeScalars: String.UnicodeScalarView {
-    return String(self).unicodeScalars
+  public typealias UnicodeScalarView = _UnicodeViews<UTF16View, UTF16>.Scalars
+  public var unicodeScalars: UnicodeScalarView {
+    return _UnicodeViews(utf16, UTF16.self).scalars
   }
 }
 
