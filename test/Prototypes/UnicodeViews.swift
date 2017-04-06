@@ -1,4 +1,4 @@
-//===--- XUnicodeViews.swift -----------------------------------------------===//
+//===--- UnicodeViews.swift -----------------------------------------------===//
 //
 // This source file is part of the Swift.org open source project
 //
@@ -12,7 +12,7 @@
 
 import SwiftShims
 
-public enum AnyXUnicodeIndex : Comparable {
+public enum AnyUnicodeIndex : Comparable {
 case encodedOffset(Int)
   
 case transcoded(
@@ -35,7 +35,7 @@ case unicodeScalar(encodedOffset: Int, width: Int, scalar: UnicodeScalar?)
     }
   }
 
-  public static func < (lhs: AnyXUnicodeIndex, rhs: AnyXUnicodeIndex) -> Bool {
+  public static func < (lhs: AnyUnicodeIndex, rhs: AnyUnicodeIndex) -> Bool {
     let l = lhs.encodedOffset
     let r = rhs.encodedOffset
     if _fastPath(l < r) { return true }
@@ -50,7 +50,7 @@ case unicodeScalar(encodedOffset: Int, width: Int, scalar: UnicodeScalar?)
     }
   }
 
-  public static func == (lhs: AnyXUnicodeIndex, rhs: AnyXUnicodeIndex) -> Bool {
+  public static func == (lhs: AnyUnicodeIndex, rhs: AnyUnicodeIndex) -> Bool {
     let l = lhs.encodedOffset
     let r = rhs.encodedOffset
     if _fastPath(l != r) { return false }
@@ -73,32 +73,32 @@ public func __swift_stdlib_U_FAILURE(_ x: __swift_stdlib_UErrorCode) -> Bool {
  return x.rawValue > __swift_stdlib_U_ZERO_ERROR.rawValue
 }
 
-/// XUnicode views should conform to this protocol, which supports index
+/// Unicode views should conform to this protocol, which supports index
 /// interchange and String type erasure.
-public protocol _XUnicodeView : BidirectionalCollection {
-  func nativeIndex(_: AnyXUnicodeIndex) -> Index
-  func anyIndex(_ : Index) -> AnyXUnicodeIndex
+public protocol _UnicodeView : BidirectionalCollection {
+  func nativeIndex(_: AnyUnicodeIndex) -> Index
+  func anyIndex(_ : Index) -> AnyUnicodeIndex
 }
 
-extension _XUnicodeView {
+extension _UnicodeView {
   /// Constructs a copy of other
   public init(_ other: Self) { self = other }
 }
 
-/// A XUnicodeView that is already using AnyXUnicodeIndex has trivial
+/// A UnicodeView that is already using AnyUnicodeIndex has trivial
 /// interchange
-extension _XUnicodeView where Index == AnyXUnicodeIndex {
-  public func nativeIndex(_ x: AnyXUnicodeIndex) -> Index { return x }
-  public func anyIndex(_ x: Index) -> AnyXUnicodeIndex { return x }
+extension _UnicodeView where Index == AnyUnicodeIndex {
+  public func nativeIndex(_ x: AnyUnicodeIndex) -> Index { return x }
+  public func anyIndex(_ x: Index) -> AnyUnicodeIndex { return x }
 }
 
-public protocol XUnicodeView : _XUnicodeView {
-  associatedtype SubSequence: _XUnicodeView = XUnicodeViewSlice<Self>
+public protocol UnicodeView : _UnicodeView {
+  associatedtype SubSequence: _UnicodeView = UnicodeViewSlice<Self>
 }
 
 //===----------------------------------------------------------------------===//
-public struct XUnicodeViewSlice<BaseView: _XUnicodeView>
-  : BidirectionalCollectionWrapper, XUnicodeView {
+public struct UnicodeViewSlice<BaseView: _UnicodeView>
+  : BidirectionalCollectionWrapper, UnicodeView {
   public typealias Base = BidirectionalSlice<BaseView>
   public typealias Index = Base.Index
   public typealias IndexDistance = Base.IndexDistance
@@ -108,22 +108,22 @@ public struct XUnicodeViewSlice<BaseView: _XUnicodeView>
   public init(base: BaseView, bounds: Range<BaseView.Index>) {
     self.base = Base(base: base, bounds: bounds)
   }
-  public func nativeIndex(_ x: AnyXUnicodeIndex) -> Index {
+  public func nativeIndex(_ x: AnyUnicodeIndex) -> Index {
     return base.base.nativeIndex(x)
   }
-  public func anyIndex(_ x: Index) -> AnyXUnicodeIndex {
+  public func anyIndex(_ x: Index) -> AnyUnicodeIndex {
     return base.base.anyIndex(x)
   }
-  public typealias SubSequence = XUnicodeViewSlice
+  public typealias SubSequence = UnicodeViewSlice
   
   public subscript(bounds: Range<Index>) -> SubSequence {
     return SubSequence(base: base.base, bounds: bounds)
   }
 }
 
-public struct RandomAccessXUnicodeViewSlice<
-  BaseView: _XUnicodeView & RandomAccessCollection
-> : BidirectionalCollectionWrapper, XUnicodeView, RandomAccessCollection {
+public struct RandomAccessUnicodeViewSlice<
+  BaseView: _UnicodeView & RandomAccessCollection
+> : BidirectionalCollectionWrapper, UnicodeView, RandomAccessCollection {
   public typealias Base = RandomAccessSlice<BaseView>
   public typealias Index = Base.Index
   public typealias IndexDistance = Base.IndexDistance
@@ -133,35 +133,35 @@ public struct RandomAccessXUnicodeViewSlice<
   init(base: BaseView, bounds: Range<BaseView.Index>) {
     self.base = Base(base: base, bounds: bounds)
   }
-  public func nativeIndex(_ x: AnyXUnicodeIndex) -> Index {
+  public func nativeIndex(_ x: AnyUnicodeIndex) -> Index {
     return base.base.nativeIndex(x)
   }
-  public func anyIndex(_ x: Index) -> AnyXUnicodeIndex {
+  public func anyIndex(_ x: Index) -> AnyUnicodeIndex {
     return base.base.anyIndex(x)
   }
-  public typealias SubSequence = RandomAccessXUnicodeViewSlice
+  public typealias SubSequence = RandomAccessUnicodeViewSlice
   
   public subscript(bounds: Range<Index>) -> SubSequence {
     return SubSequence(base: base.base, bounds: bounds)
   }
 }
 
-public struct RangeReplaceableXUnicodeViewSlice<
-  BaseView: _XUnicodeView & RangeReplaceableCollection
-> : BidirectionalCollectionWrapper, XUnicodeView, RangeReplaceableCollection {
+public struct RangeReplaceableUnicodeViewSlice<
+  BaseView: _UnicodeView & RangeReplaceableCollection
+> : BidirectionalCollectionWrapper, UnicodeView, RangeReplaceableCollection {
   public typealias Base = RangeReplaceableBidirectionalSlice<BaseView>
   public typealias Index = Base.Index
   public typealias IndexDistance = Base.IndexDistance
   public typealias Iterator = Base.Iterator
   public var base: Base
 
-  public func nativeIndex(_ x: AnyXUnicodeIndex) -> Index {
+  public func nativeIndex(_ x: AnyUnicodeIndex) -> Index {
     return base.base.nativeIndex(x)
   }
-  public func anyIndex(_ x: Index) -> AnyXUnicodeIndex {
+  public func anyIndex(_ x: Index) -> AnyUnicodeIndex {
     return base.base.anyIndex(x)
   }
-  public typealias SubSequence = RangeReplaceableXUnicodeViewSlice<BaseView>
+  public typealias SubSequence = RangeReplaceableUnicodeViewSlice<BaseView>
   
   public subscript(bounds: Range<Index>) -> SubSequence {
     return SubSequence(base: base.base, bounds: bounds)
@@ -180,24 +180,22 @@ public struct RangeReplaceableXUnicodeViewSlice<
     base = Base()
   }
   public mutating func _tryToReplaceSubrange<C>(
-    from targetStart: Index, to targetEnd: Index,
+    _ target: Range<Index>,
     with replacement: C) -> Bool
   where C : Collection, C.Iterator.Element == Iterator.Element {
-    return base._tryToReplaceSubrange(
-      from: targetStart, to: targetEnd, with: replacement)
+    return base._tryToReplaceSubrange(target, with: replacement)
   }
 }
 //===----------------------------------------------------------------------===//
 
-/*
-//===--- RandomAccessXUnicodeView ------------------------------------------===//
-/// Adapts any `RandomAccessCollection` to a `XUnicodeView`, with
+//===--- RandomAccessUnicodeView ------------------------------------------===//
+/// Adapts any `RandomAccessCollection` to a `UnicodeView`, with
 /// `encodedOffset`s equal to the number of index steps from the `startIndex`.
 ///
 /// Computing `encodedOffset` this way is pretty safe because if the base view
 /// has random access, it must have a constant number N of elements per code
 /// unit, and in all the usual instances, N = 1
-public struct RandomAccessXUnicodeView<Base_: RandomAccessCollection> {
+public struct RandomAccessUnicodeView<Base_: RandomAccessCollection> {
   public typealias Base = Base_
   public typealias Iterator = Base.Iterator
   public var base: Base
@@ -205,7 +203,7 @@ public struct RandomAccessXUnicodeView<Base_: RandomAccessCollection> {
   public init(_ base: Base) { self.base = base }
 }
 
-extension RandomAccessXUnicodeView : BidirectionalCollectionWrapper {
+extension RandomAccessUnicodeView : BidirectionalCollectionWrapper {
   public struct Index : ForwardingWrapper, Comparable {
     public var base: Base_.IndexDistance
   }
@@ -216,21 +214,23 @@ extension RandomAccessXUnicodeView : BidirectionalCollectionWrapper {
   public func _unwrap(_ i: Index) -> Base.Index {
     return base.index(atOffset: i.base)
   }
-  public func nativeIndex(_ x: AnyXUnicodeIndex) -> Index {
-    let d = numericCast(x.encodedOffset) as Base.IndexDistance
-    return self._basey.index(_basey.startIndex, offsetBy: d)
+  public func nativeIndex(_ x: AnyUnicodeIndex) -> Index {
+    let b: Base_ = base
+    let d: Base_.IndexDistance = x.encodedOffset^
+    return b.index(b.startIndex, offsetBy: d)
   }
-  public func anyIndex(_ x: Index) -> AnyXUnicodeIndex {
-    return .encodedOffset(base.offset(of: x))
+  public func anyIndex(_ x: Index) -> AnyUnicodeIndex {
+    let b: Base_ = base
+    return .encodedOffset(b.offset(of: x)^)
   }
 }
 
-extension RandomAccessXUnicodeView {
+extension RandomAccessUnicodeView {
   public mutating func _tryToReplaceSubrange<C: Collection>(
-    from targetStart: Index, to targetEnd: Index, with replacement: C
+    _ target: Range<Index>, with replacement: C
   ) -> Bool
   where C.Iterator.Element == Iterator.Element {
-    // XUnicodeViews must have value semantics.  Note that this check will fail
+    // UnicodeViews must have value semantics.  Note that this check will fail
     // to work if the view being wrapped is itself a wrapper that forwards
     // _tryToReplaceSubrange to an underlying reference type.
     if Base_.self is AnyObject.Type {
@@ -242,32 +242,32 @@ extension RandomAccessXUnicodeView {
       ) { return false }
     }
     return base._tryToReplaceSubrange(
-      from: _unwrap(targetStart), to: _unwrap(targetEnd),  with: replacement)
+      _unwrap(target.lowerBound)..<_unwrap(target.upperBound),
+      with: replacement)
   }
 }
 
-extension RandomAccessXUnicodeView : RandomAccessCollection {}
+extension RandomAccessUnicodeView : RandomAccessCollection {}
 
-extension RandomAccessXUnicodeView : XUnicodeView {
+extension RandomAccessUnicodeView : UnicodeView {
   public typealias SubSequence
-  = RandomAccessXUnicodeViewSlice<RandomAccessXUnicodeView>
+  = RandomAccessUnicodeViewSlice<RandomAccessUnicodeView>
   
   public subscript(bounds: Range<Index>) -> SubSequence {
     return SubSequence(base: self, bounds: bounds)
   }  
 }
-*/
 
 //===----------------------------------------------------------------------===//
 
 /// A collection of `CodeUnit`s to be interpreted by some `Encoding`.
 ///
-/// View types nested in _XUnicodeViews may be suitable *generic* implementation
-/// guts for views for models of XUnicode, but specific models may want to
+/// View types nested in _UnicodeViews may be suitable *generic* implementation
+/// guts for views for models of Unicode, but specific models may want to
 /// provide their own implementations.  For example, the UTF16 view of a
 /// Latin1String would might be a simple lazy zero-extended mapping, rather than
 /// something that goes through the transcoding machinery.
-public struct _XUnicodeViews<
+public struct _UnicodeViews<
   CodeUnits : RandomAccessCollection,
   Encoding : UnicodeEncoding
 >
@@ -285,15 +285,15 @@ where Encoding.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element,
 }
 
 //===--- Helper typealias -------------------------------------------------===//
-/// A straightforward typealias for _XUnicodeViews
+/// A straightforward typealias for _UnicodeViews
 ///
 /// Use this to escape the automatic deduction of the generic arguments given
-/// the name `_XUnicodeViews` from within nested contexts
+/// the name `_UnicodeViews` from within nested contexts
 /// (https://bugs.swift.org/browse/SR-4155).
-internal typealias _XUnicodeViews_<
+internal typealias _UnicodeViews_<
   CodeUnits : RandomAccessCollection,
   Encoding : UnicodeEncoding
->  = _XUnicodeViews<CodeUnits, Encoding>
+>  = _UnicodeViews<CodeUnits, Encoding>
 where Encoding.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element,
   CodeUnits.SubSequence : RandomAccessCollection,
   CodeUnits.SubSequence.Index == CodeUnits.Index,
@@ -311,11 +311,11 @@ protocol _UnicodeScalarMapping {
 }
 
 //===----------------------------------------------------------------------===//
-// _XUnicodeViews._MappedScalars
+// _UnicodeViews._MappedScalars
 //===----------------------------------------------------------------------===//
 /// A lazy collection of the source encoded scalars that for which Transform
 /// doesn't return nil.
-extension _XUnicodeViews {
+extension _UnicodeViews {
   public struct _MappedScalars<Mapping: _UnicodeScalarMapping>
   where Mapping.InputEncoding == Encoding {
     public var codeUnits: CodeUnits
@@ -354,7 +354,7 @@ extension _XUnicodeViews {
   }
 }
 
-extension _XUnicodeViews._MappedScalars {
+extension _UnicodeViews._MappedScalars {
   public struct Index : Comparable {
     // In one call, parsing produces both:
     // - the buffer of code units comprising the scalar and
@@ -390,7 +390,7 @@ extension _XUnicodeViews._MappedScalars {
 }
 
 /// Collection Conformance
-extension _XUnicodeViews._MappedScalars : BidirectionalCollection {
+extension _UnicodeViews._MappedScalars : BidirectionalCollection {
   public var startIndex: Index {
     if _slowPath(codeUnits.isEmpty) { return endIndex }
     return index(after:
@@ -462,8 +462,8 @@ extension _XUnicodeViews._MappedScalars : BidirectionalCollection {
   }
 }
 
-extension _XUnicodeViews._MappedScalars : XUnicodeView {
-  public func nativeIndex(_ x: AnyXUnicodeIndex) -> Index {
+extension _UnicodeViews._MappedScalars : UnicodeView {
+  public func nativeIndex(_ x: AnyUnicodeIndex) -> Index {
     let p = codeUnits.index(atOffset: x.encodedOffset)
     if case .unicodeScalar(_, let width, let scalar) = x {
       return Index(
@@ -473,14 +473,14 @@ extension _XUnicodeViews._MappedScalars : XUnicodeView {
     return index(after: Index(base: p, next: p, output: nil))
   }
   
-  public func anyIndex(_ x: Index) -> AnyXUnicodeIndex {
+  public func anyIndex(_ x: Index) -> AnyUnicodeIndex {
     return .unicodeScalar(
       encodedOffset: numericCast(codeUnits.offset(of: x.base)),
       width: numericCast(codeUnits.distance(from: x.base, to: x.next)),
       scalar: x.output == nil ? nil : mapping.transform(x.output!))
   }
   
-  public typealias SubSequence = XUnicodeViewSlice<Self_>
+  public typealias SubSequence = UnicodeViewSlice<Self_>
   public subscript(bounds: Range<Index>) -> SubSequence {
     return SubSequence(base: self, bounds: bounds)
   }
@@ -489,12 +489,12 @@ extension _XUnicodeViews._MappedScalars : XUnicodeView {
 
 
 //===----------------------------------------------------------------------===//
-// _XUnicodeViews.Scalars
+// _UnicodeViews.UnicodeScalars
 //===----------------------------------------------------------------------===//
 
 /// A lazy collection of `Encoding.EncodedScalar` that results
 /// from parsing an instance of codeUnits using that `Encoding`.
-extension _XUnicodeViews {
+extension _UnicodeViews {
   struct _ToUnicodeScalar : _UnicodeScalarMapping {
     typealias Output = UnicodeScalar
     typealias InputEncoding = Encoding
@@ -517,12 +517,12 @@ extension _XUnicodeViews {
 }
 
 //===----------------------------------------------------------------------===//
-// _XUnicodeViews.ScalarsTranscoded<ToEncoding>
+// _UnicodeViews.ScalarsTranscoded<ToEncoding>
 //===----------------------------------------------------------------------===//
 
 /// A lazy collection of `Encoding.EncodedScalar` that results
 /// from parsing an instance of codeUnits using that `Encoding`.
-extension _XUnicodeViews {
+extension _UnicodeViews {
   public struct _TranscodeScalar<OutputEncoding: UnicodeEncoding>
     : _UnicodeScalarMapping {
     typealias Output = OutputEncoding.EncodedScalar
@@ -553,9 +553,9 @@ extension _XUnicodeViews {
 
 
 //===----------------------------------------------------------------------===//
-// _XUnicodeViews.TranscodedView<ToEncoding>
+// _UnicodeViews.TranscodedView<ToEncoding>
 //===----------------------------------------------------------------------===//
-extension _XUnicodeViews {
+extension _UnicodeViews {
   public typealias TranscodedView<ToEncoding : UnicodeEncoding>
   = _TranscodedView<CodeUnits, Encoding, ToEncoding>
   
@@ -587,7 +587,7 @@ where FromEncoding_.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element
   // This view is, in spirit, the result of flattening the ScalarsTranscoded
   // view.  We flatten that view of the codeUnits' slice type just to make
   // index translation more straightforward.
-  public typealias _Unflattened = _XUnicodeViews<CodeUnits, FromEncoding>
+  public typealias _Unflattened = _UnicodeViews<CodeUnits, FromEncoding>
     .ScalarsTranscoded<ToEncoding>
   public typealias Base = FlattenBidirectionalCollection<_Unflattened>
 
@@ -605,17 +605,17 @@ where FromEncoding_.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element
     to dst: ToEncoding.Type = ToEncoding.self
   ) {
     base = Base(
-      _XUnicodeViews(
+      _UnicodeViews(
         codeUnits, FromEncoding.self).scalarsTranscoded(to: ToEncoding.self))
   }
 }
 
-extension _TranscodedView : XUnicodeView {
-  public typealias SubSequence = XUnicodeViewSlice<Self_>
+extension _TranscodedView : UnicodeView {
+  public typealias SubSequence = UnicodeViewSlice<Self_>
   public subscript(bounds: Range<Index>) -> SubSequence {
     return SubSequence(base: self, bounds: bounds)
   }
-  public func nativeIndex(_ x: AnyXUnicodeIndex) -> Index {
+  public func nativeIndex(_ x: AnyUnicodeIndex) -> Index {
     let outer = base._base.nativeIndex(x)
     if case .transcoded(_, let outputOffset, let encodingID) = x {
       if encodingID == ToEncoding.EncodedScalar.self
@@ -627,7 +627,7 @@ extension _TranscodedView : XUnicodeView {
     return Index(outer,nil)
   }
   
-  public func anyIndex(_ i: Index) -> AnyXUnicodeIndex {
+  public func anyIndex(_ i: Index) -> AnyUnicodeIndex {
     return .transcoded(
       inputOffset: base._base.anyIndex(i._outer).encodedOffset,
       outputOffset: i._inner == nil ? 0
@@ -637,7 +637,10 @@ extension _TranscodedView : XUnicodeView {
   }
 }
 
-extension _XUnicodeViews /*: _UTextable*/ {
+extension _UnicodeViews : _UTextable {
+}
+
+extension _UnicodeViews {
   internal func _nativeLength(_ uText: inout _UText) -> Int64 {
     uText.validate()
     return codeUnits.count^
@@ -646,15 +649,15 @@ extension _XUnicodeViews /*: _UTextable*/ {
   internal func _parsedSlice(
     _ offset: Int64,
     _ slice: (CodeUnits.Index) -> CodeUnits.SubSequence
-  ) -> _XUnicodeViews<CodeUnits.SubSequence,Encoding>.EncodedScalars.SubSequence {
-    return _XUnicodeViews_(
+  ) -> _UnicodeViews<CodeUnits.SubSequence,Encoding>.EncodedScalars.SubSequence {
+    return _UnicodeViews_(
       slice(codeUnits.index(atOffset: offset)), Encoding.self
     ).encodedScalars.dropFirst(0)
   }
 
   internal func _parsedSuffix(
     fromOffset offset: Int64
-  ) -> _XUnicodeViews<CodeUnits.SubSequence,Encoding>.EncodedScalars.SubSequence {
+  ) -> _UnicodeViews<CodeUnits.SubSequence,Encoding>.EncodedScalars.SubSequence {
     return _parsedSlice(offset, codeUnits.suffix(from:))
   }
 
@@ -775,7 +778,7 @@ extension _XUnicodeViews /*: _UTextable*/ {
       // the generic TranscodedView, which is likely to be less efficient in
       // some common cases.
       let source
-        = _XUnicodeViews_(base, Encoding.self).transcoded(to: UTF16.self)
+        = _UnicodeViews_(base, Encoding.self).transcoded(to: UTF16.self)
       var d = destination // copy due to https://bugs.swift.org/browse/SR-3782
       let (limit, remainder) = d.copy(from: source)
       
@@ -821,14 +824,14 @@ extension _XUnicodeViews /*: _UTextable*/ {
       ..<
       codeUnits.index(atOffset: nativeIndex)]
     
-    return _XUnicodeViews_(
+    return _UnicodeViews_(
       nativeChunk, Encoding.self).transcoded(to: UTF16.self).count^
   }
 }
 
-extension _XUnicodeViews {
+extension _UnicodeViews {
   
-  public struct CharacterView : XUnicodeView {
+  public struct CharacterView : UnicodeView {
 
     public init(_ codeUnits: CodeUnits, _: Encoding.Type = Encoding.self) {
       self.codeUnits = codeUnits
@@ -836,7 +839,7 @@ extension _XUnicodeViews {
 
     internal let codeUnits: CodeUnits
 
-    public typealias SubSequence = XUnicodeViewSlice<CharacterView>
+    public typealias SubSequence = UnicodeViewSlice<CharacterView>
     public subscript(bounds: Range<Index>) -> SubSequence {
       return SubSequence(base: self, bounds: bounds)
     }
@@ -857,7 +860,7 @@ extension _XUnicodeViews {
       return Index(base: codeUnits.endIndex, next: codeUnits.endIndex)
     }
 
-    public func nativeIndex(_ i: AnyXUnicodeIndex) -> Index {
+    public func nativeIndex(_ i: AnyUnicodeIndex) -> Index {
       let p = codeUnits.index(atOffset: i.encodedOffset)
       if case .character(_, let width) = i {
         return Index(base: p, next: codeUnits.index(p, offsetBy: width^))
@@ -865,7 +868,7 @@ extension _XUnicodeViews {
       return index(after: Index(base: p, next: p))
     }
     
-    public func anyIndex(_ i: Index) -> AnyXUnicodeIndex {
+    public func anyIndex(_ i: Index) -> AnyUnicodeIndex {
       return .character(
         encodedOffset: codeUnits.offset(of: i.base)^,
         width: codeUnits.distance(from: i.base, to: i.next)^)
@@ -877,7 +880,7 @@ extension _XUnicodeViews {
 
     public func index(after i: Index) -> Index {
       // If the next two scalar values are both < 0x300, we can bypass ICU.
-      let u32 = _UnicodeViews(
+      let u32 = _UnicodeViews_(
         codeUnits[i.next...], Encoding.self).transcoded(to: UTF32.self)
       
       guard let s0 = u32.first else { return Index(base: i.next, next: i.next) }
@@ -901,7 +904,7 @@ extension _XUnicodeViews {
 
     public func index(before i: Index) -> Index {
       // If the previous two scalar values are both < 0x300, we can bypass ICU.
-      let u32 = _UnicodeViews(
+      let u32 = _UnicodeViews_(
         codeUnits[..<i.base], Encoding.self).transcoded(to: UTF32.self)
       
       guard let s1 = u32.last else {
@@ -938,7 +941,7 @@ extension _XUnicodeViews {
       _precondition(err.isSuccess, "unexpected ubrk_open failure")
       defer { __swift_stdlib_ubrk_close(bi) }
 
-      return _UnicodeViews(codeUnits, Encoding.self)._withUText { u in
+      return _UnicodeViews_(codeUnits, Encoding.self)._withUText { u in
         __swift_stdlib_ubrk_setUText(bi, u, &err)
         _precondition(err.isSuccess, "unexpected ubrk_setUText failure")
         return body(bi)
@@ -951,7 +954,7 @@ extension _XUnicodeViews {
   }
 }
 
-extension _XUnicodeViews {
+extension _UnicodeViews {
   /// Invokes `body` on a contiguous buffer of our UTF16.
   ///
   /// - Note: `body` should be prepared to deal with invalid UTF16.
@@ -969,6 +972,132 @@ extension _XUnicodeViews {
   }
 }
 
+//===----------------------------------------------------------------------===//
+
+// Michael NOTE: Trying to nest this crashed the remangler...
+//
+// A Latin1 character view, more efficient than a general purpose character
+// view. Checks for special cases inside Latin1, otherwise code-unit based.
+//
+// FIXME: Better name here. It's not just Latin1, but it's also a valid (TODO:
+// prove) view for many ranges of unicode scalar values. Maybe name based on the
+// GB_n level of rule application from the Unicode spec?
+//
+// TODO: Would it be better to unify under the general character view, and
+// incorporate our fast paths as applicable? This seems like the better long-
+// term direction to take here.
+//
+public struct Latin1CharacterView<
+  CodeUnits : RandomAccessCollection,
+  Encoding : UnicodeEncoding
+> : UnicodeView
+  where Encoding.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element,
+  CodeUnits.SubSequence : RandomAccessCollection,
+  CodeUnits.SubSequence.Index == CodeUnits.Index,
+  CodeUnits.SubSequence.SubSequence == CodeUnits.SubSequence,
+  CodeUnits.SubSequence.Iterator.Element == CodeUnits.Iterator.Element,
+  CodeUnits.Iterator.Element : UnsignedInteger
+{
+  typealias CodeUnit = CodeUnits.Iterator.Element
+  internal let _CR: CodeUnit = 0x0D
+  internal let _LF: CodeUnit = 0x0A
+
+  public init(_ codeUnits: CodeUnits) {
+    self.codeUnits = codeUnits
+  }
+
+  internal let codeUnits: CodeUnits
+
+  public typealias SubSequence = UnicodeViewSlice<Latin1CharacterView>
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    return SubSequence(base: self, bounds: bounds)
+  }
+
+  public struct Index : ForwardingWrapper, Comparable {
+    public var base: CodeUnits.IndexDistance
+  }
+
+  public func nativeIndex(_ x: AnyUnicodeIndex) -> Index {
+    return Index(base: x.encodedOffset^)
+  }
+  public func anyIndex(_ x: Index) -> AnyUnicodeIndex {
+    return .encodedOffset(x.base^)
+  }
+  
+  public var startIndex: Index { return Index(base: 0) }
+  public var endIndex: Index { return Index(base: codeUnits.count) }
+
+  internal func getCU(at i: Index) -> CodeUnit {
+    let idx = codeUnits.index(atOffset: i.base)
+    return codeUnits[idx]
+  }
+  internal func getIndex(_ i: CodeUnits.Index) -> Index {
+    return Index(base: codeUnits.distance(from: codeUnits.startIndex, to: i))
+  }
+
+  public subscript(i: Index) -> Character {
+    let nextIdx = index(after: i)
+
+    // Fast path: Single code unit character (i.e. not CR-LF)
+    if _fastPath(nextIdx.base == i.base+1) {
+      return Character(UnicodeScalar(numericCast(getCU(at: i))))
+    }
+
+    // FIXME: Is there anything else in Latin1 except CR-LF that's not single-
+    // code-unit-is-single-grapheme?
+    _sanityCheck(nextIdx.base == i.base+2)
+    _sanityCheck(getCU(at: i) == _CR)
+    _sanityCheck(getCU(at: nextIdx) == _LF)
+    return Character("\u{0D}\u{0A}")
+  }
+
+  public func index(after i: Index) -> Index {
+    let nextCUIdx = codeUnits.index(atOffset: i.base+1)
+    // Fast path: Single code unit character (i.e. not CR-LF)
+    if _fastPath(getCU(at: i) != _CR) {
+      return getIndex(nextCUIdx)
+    }
+
+    // Special case: CR-LF is single grapheme
+    if nextCUIdx != codeUnits.endIndex && codeUnits[nextCUIdx] == _LF {
+      return getIndex(codeUnits.index(after: nextCUIdx))
+    }
+
+    // FIXME: Is there anything else in Latin1 except CR-LF that's not single-
+    // code-unit-is-single-grapheme?
+    return getIndex(nextCUIdx)
+  }
+
+  public func index(before i: Index) -> Index {
+    let previousCUIdx = codeUnits.index(atOffset: i.base-1)
+    // Fast path: Single code unit character (i.e. not CR-LF)
+    if _fastPath(codeUnits[previousCUIdx] != _LF) {
+      return getIndex(previousCUIdx)
+    }
+
+    // Special case: CR-LF is single grapheme
+    if previousCUIdx != codeUnits.startIndex {
+      let previousPreviousCUIdx = codeUnits.index(before: previousCUIdx)
+      if codeUnits[previousPreviousCUIdx] == _CR {
+        return getIndex(previousPreviousCUIdx)
+      }
+    }
+
+    // FIXME: Is there anything else in Latin1 except CR-LF that's not single-
+    // code-unit-is-single-grapheme?
+    return getIndex(previousCUIdx)
+  }
+}
+
+// TODO: Also valid for other encodings when properties over scalar values still
+// apply.
+extension _UnicodeViews where CodeUnits.Iterator.Element : UnsignedInteger {
+  // TODO: Currently, present for all Strings. Might want to have type
+  // restrictions.
+  public var latin1CharacterView: Latin1CharacterView<CodeUnits, Encoding> {
+    return Latin1CharacterView<CodeUnits, Encoding>(codeUnits)
+  }
+}
 
 //===----------------------------------------------------------------------===//
 //===----------------------------------------------------------------------===//
@@ -976,7 +1105,7 @@ extension _XUnicodeViews {
 // A normalization segment that is FCC-normalized. This is a collection of
 // normalized UTF16 code units.
 //
-// Note that this is not a XUnicodeView. Indices into a normalized segment are
+// Note that this is not a UnicodeView. Indices into a normalized segment are
 // not native indices, and do not necessarily correspond to any particular code
 // unit as they may of undergone composition or decomposition, which in turn may
 // also re-order code units. Thus, FCCNormalizedSegments are not suitable for
@@ -1047,7 +1176,7 @@ where
     self.codeUnits = codeUnits
   }
 
-  public init(_ unicodeView: _XUnicodeViews<CodeUnits, FromEncoding>) {
+  public init(_ unicodeView: _UnicodeViews<CodeUnits, FromEncoding>) {
     self.init(unicodeView.codeUnits)
   }
 
@@ -1221,14 +1350,14 @@ where
             endIndex: end)
   }
 
-  // Get the rest of the XUnicode view
+  // Get the rest of the Unicode view
   internal func unicodeView(
     from start: CodeUnits.Index? = nil,
     until end: CodeUnits.Index? = nil
-  ) -> _XUnicodeViews<CodeUnits.SubSequence, FromEncoding> {
+  ) -> _UnicodeViews<CodeUnits.SubSequence, FromEncoding> {
     let end = end ?? codeUnits.endIndex
     let start = start ?? codeUnits.startIndex
-    return _XUnicodeViews(codeUnits[start..<end], FromEncoding.self)
+    return _UnicodeViews(codeUnits[start..<end], FromEncoding.self)
   }
 }
 
@@ -1300,7 +1429,7 @@ extension FCCNormalizedLazySegments : BidirectionalCollection {
   public typealias SubSequence = BidirectionalSlice<FCCNormalizedLazySegments>
 }
 
-extension _XUnicodeViews {
+extension _UnicodeViews {
   public struct FCCNormalizedUTF16View: BidirectionalCollectionWrapper {
     public typealias Base = FlattenBidirectionalCollection<
       FCCNormalizedLazySegments<CodeUnits, Encoding>
@@ -1310,7 +1439,7 @@ extension _XUnicodeViews {
     public typealias IndexDistance = Base.IndexDistance
     public typealias Self_ = FCCNormalizedUTF16View
     
-    public init(_ unicodeView: _XUnicodeViews<CodeUnits, Encoding>) {
+    public init(_ unicodeView: _UnicodeViews<CodeUnits, Encoding>) {
       self.base = Base(FCCNormalizedLazySegments(unicodeView))
     }
   }
@@ -1320,8 +1449,8 @@ extension _XUnicodeViews {
   }
 }
 
-extension _XUnicodeViews.FCCNormalizedUTF16View : XUnicodeView {
-  public func nativeIndex(_ i: AnyXUnicodeIndex) -> Index {
+extension _UnicodeViews.FCCNormalizedUTF16View : UnicodeView {
+  public func nativeIndex(_ i: AnyUnicodeIndex) -> Index {
     let segmentIdx = base._base.nextSegment(
       startingAt: base._base.codeUnits.index(
         base._base.codeUnits.startIndex,
@@ -1331,11 +1460,11 @@ extension _XUnicodeViews.FCCNormalizedUTF16View : XUnicodeView {
     return Index(segmentIdx, segmentIdx.segment.startIndex)
   }
   
-  public func anyIndex(_ i: Index) -> AnyXUnicodeIndex {
+  public func anyIndex(_ i: Index) -> AnyUnicodeIndex {
     return .encodedOffset(numericCast(i._outer.nativeOffset))
   }
   
-  public typealias SubSequence = XUnicodeViewSlice<Self_>
+  public typealias SubSequence = UnicodeViewSlice<Self_>
   public subscript(bounds: Range<Index>) -> SubSequence {
     return SubSequence(base: self, bounds: bounds)
   }
