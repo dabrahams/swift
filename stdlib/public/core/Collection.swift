@@ -412,7 +412,7 @@ public struct IndexingIterator<
   ///   exists; otherwise, `nil`.
   @_inlineable
   public mutating func next() -> Elements._Element? {
-    if _position == _elements.endIndex { return nil }
+    if _slowPath(_position >= _elements.endIndex) { return nil }
     let element = _elements[_position]
     _elements.formIndex(after: &_position)
     return element
@@ -1217,7 +1217,7 @@ extension _Indexable {
 
     var start = start
     var count: IndexDistance = 0
-    while start != end {
+    while start < end {
       count = count + 1
       formIndex(after: &start)
     }

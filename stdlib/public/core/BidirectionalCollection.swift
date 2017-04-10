@@ -198,17 +198,13 @@ extension _BidirectionalIndexable {
     var start = start
     var count: IndexDistance = 0
 
-    if start < end {
-      while start != end {
-        count += 1 as IndexDistance
-        formIndex(after: &start)
-      }
+    while start < end {
+      count += 1 as IndexDistance
+      formIndex(after: &start)
     }
-    else if start > end {
-      while start != end {
-        count -= 1 as IndexDistance
-        formIndex(before: &start)
-      }
+    while start > end {
+      count -= 1 as IndexDistance
+      formIndex(before: &start)
     }
 
     return count
