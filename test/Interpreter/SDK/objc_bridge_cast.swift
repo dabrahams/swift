@@ -3,6 +3,9 @@
 
 // REQUIRES: objc_interop
 
+// XFAIL: *
+// <rdar://problem/31555979> Leak with associated objects
+
 // Test dynamic casts that bridge value types through the runtime.
 
 import Foundation
@@ -236,6 +239,7 @@ func testValueToObjectBridgingInSwitch() {
   autoreleasepool {
     let string = "hello"
     let nsString = string as NSString
+    dump(nsString)
     objc_setAssociatedObject(nsString, &CanaryAssocObjectHandle, Canary(),
       .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     

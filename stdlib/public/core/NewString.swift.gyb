@@ -210,6 +210,7 @@ extension String : Unicode {
       forward=switchContent,
       wrap_index='x.characters.anyIndex',
       unwrap_index='x.characters.nativeIndex',
+      bounds_check_access=True,
       nonmutating=True,
       Element='Character')}
   
@@ -887,6 +888,7 @@ extension Substring : Unicode {
         switch_('content._wholeContent._rep', stmt),
       wrap_index='x.characters.anyIndex',
       unwrap_index='x.characters.nativeIndex',
+      bounds_check_access=True,
       nonmutating=True,
       Element='Character')}
 
@@ -1376,6 +1378,7 @@ extension String.Content.${View} : UnicodeView {
       forward=switchContent,
       wrap_index='x.%s.anyIndex' % view,
       unwrap_index='x.%s.nativeIndex' % view,
+      bounds_check_access=True,
       nonmutating=True,
       Element=Element)}
   
@@ -1448,6 +1451,29 @@ extension String.Content {
       %   raise RuntimeError, 'UNHANDLED VIEW'
       % end
     }
+  }
+}
+
+extension String.Content.${View} : CustomStringConvertible, CustomDebugStringConvertible {
+  public var description: String {
+    return String(content: self.content)
+  }
+
+  public var debugDescription: String {
+    return "String.Content.${View}(\(self.description.debugDescription))"
+  }
+}
+
+// Reflection
+extension String.Content.${View} : CustomReflectable {
+  public var customMirror: Mirror {
+    return Mirror(self, unlabeledChildren: self)
+  }
+}
+
+extension String.Content.${View} : CustomPlaygroundQuickLookable {
+  public var customPlaygroundQuickLook: PlaygroundQuickLook {
+    return .text(description)
   }
 }
 

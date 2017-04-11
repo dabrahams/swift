@@ -53,7 +53,7 @@ let tests = [
   ComparisonTest(.eq, "\u{0}", "\u{0}"),
 
   ComparisonTest(.lt, "\r\n", "t"),
-  ComparisonTest(.gt, "\r\n", "\n"),
+  ComparisonTest(.lt, "\r\n", "\n"),
   ComparisonTest(.lt, "\u{0}", "\u{0}\u{0}"),
 
   // Whitespace
@@ -92,7 +92,7 @@ let tests = [
   ComparisonTest(.eq, "\u{212b}", "A\u{30a}"),
   ComparisonTest(.eq, "\u{212b}", "\u{c5}"),
   ComparisonTest(.eq, "A\u{30a}", "\u{c5}"),
-  ComparisonTest(.lt, "A\u{30a}", "a"),
+  ComparisonTest(.gt, "A\u{30a}", "a"),
   ComparisonTest(.lt, "A", "A\u{30a}"),
 
   // U+2126 OHM SIGN
@@ -275,8 +275,16 @@ func checkHasPrefixHasSuffix(
   let expectHasSuffix = lhsNFDGraphemeClusters.lazy.reversed()
     .starts(with: rhsNFDGraphemeClusters.lazy.reversed(), by: (==))
 
-  expectEqual(expectHasPrefix, lhs.hasPrefix(rhs), stackTrace: stackTrace)
-  expectEqual(expectHasSuffix, lhs.hasSuffix(rhs), stackTrace: stackTrace)
+  expectEqual(
+    expectHasPrefix, lhs.hasPrefix(rhs),
+    "lhsNFDGraphemeClusters: \(lhsNFDGraphemeClusters), rhsNFDGraphemeClusters: \(rhsNFDGraphemeClusters)",
+    stackTrace: stackTrace
+  )
+  expectEqual(
+    expectHasSuffix, lhs.hasSuffix(rhs),
+    "lhsNFDGraphemeClusters: \(lhsNFDGraphemeClusters), rhsNFDGraphemeClusters: \(rhsNFDGraphemeClusters)",
+    stackTrace: stackTrace
+  )
 #endif
 }
 
