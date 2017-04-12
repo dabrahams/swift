@@ -153,6 +153,7 @@ public struct String {
   public var content: Content
 }
 
+/*
 extension String : Sequence {
   public struct Iterator : IteratorProtocol {
     public enum _Representation {
@@ -187,12 +188,19 @@ extension String : Sequence {
   }
 }
 
-extension String : Unicode {
-  public typealias Index = AnyCharacterUnicodeView.Index
-  public typealias IndexDistance = AnyCharacterUnicodeView.IndexDistance
+*/
 
+extension String : Unicode, BidirectionalCollectionWrapper {
+  public typealias Base = Content.CharacterView
+  public typealias Iterator = Base.Iterator  
+  public typealias Index = AnyUnicodeIndex
+  public typealias IndexDistance = Int
   public typealias SubSequence = Substring
 
+  // FIXME: these declarations suppress some link errors but shouldn't be needed.
+  public var startIndex: AnyUnicodeIndex { return base.startIndex }
+  public var endIndex: AnyUnicodeIndex { return base.endIndex }
+  
   // @available(swift, introduced: 4)
   public subscript(bounds: Range<Index>) -> Substring {
     get {
@@ -204,15 +212,6 @@ extension String : Unicode {
     }
   }
 
-  ${gyb.expand(
-      'ForwardCollectionAPIs.swift.gyb',
-      base='x.characters',
-      forward=switchContent,
-      wrap_index='x.characters.anyIndex',
-      unwrap_index='x.characters.nativeIndex',
-      nonmutating=True,
-      Element='Character')}
-  
   public mutating func _tryToReplaceSubrange<C: Collection>(
     _ target: Range<Index>, with replacement: C
   ) -> Bool
@@ -220,6 +219,11 @@ extension String : Unicode {
     // Doing this rather than switching will try to preserve value semantics
     // even if a case is a reference type.
     return content.characters._tryToReplaceSubrange(target, with: replacement)
+  }
+
+  public var base: Base {
+    get { return content.characters }
+    set { content.characters = newValue }
   }
 }
 
@@ -863,9 +867,11 @@ public struct Substring {
 }    
 
 
-extension Substring : Unicode {
-  public typealias Index = String.Index
-  public typealias IndexDistance = String.IndexDistance
+extension Substring : BidirectionalCollectionWrapper, Unicode {
+  public typealias Base = Content.CharacterView
+  public typealias Iterator = Base.Iterator  
+  public typealias Index = Base.Index
+  public typealias IndexDistance = Base.IndexDistance
   public typealias SubSequence = Substring
 
   public subscript(bounds: Range<Index>) -> SubSequence {
@@ -887,6 +893,7 @@ extension Substring : Unicode {
         switch_('content._wholeContent._rep', stmt),
       wrap_index='x.characters.anyIndex',
       unwrap_index='x.characters.nativeIndex',
+      bounds_check_access=True,
       nonmutating=True,
       Element='Character')}
 
@@ -900,6 +907,7 @@ extension Substring : Unicode {
   }
 }
 
+/*
 extension Substring : Sequence {
   // FIXME: this is a copy/paste of the Iterator from String.
   public struct Iterator : IteratorProtocol {
@@ -938,6 +946,7 @@ extension Substring : Sequence {
     return Iterator(content)
   }
 }
+*/
 
 
 extension Substring : RangeReplaceableCollection {
@@ -1360,8 +1369,8 @@ extension String.Content.${View} : Sequence {
 }
 
 extension String.Content.${View} : UnicodeView {
-  public typealias Index = String.Index
-  public typealias IndexDistance = String.IndexDistance
+  public typealias Index = AnyUnicodeIndex
+  public typealias IndexDistance = Int
 
   public typealias SubSequence
     = RangeReplaceableUnicodeViewSlice<String.Content.${View}>
@@ -1376,6 +1385,7 @@ extension String.Content.${View} : UnicodeView {
       forward=switchContent,
       wrap_index='x.%s.anyIndex' % view,
       unwrap_index='x.%s.nativeIndex' % view,
+      bounds_check_access=True,
       nonmutating=True,
       Element=Element)}
   
@@ -1448,6 +1458,29 @@ extension String.Content {
       %   raise RuntimeError, 'UNHANDLED VIEW'
       % end
     }
+  }
+}
+
+extension String.Content.${View} : CustomStringConvertible, CustomDebugStringConvertible {
+  public var description: String {
+    return String(content: self.content)
+  }
+
+  public var debugDescription: String {
+    return "String.Content.${View}(\(self.description.debugDescription))"
+  }
+}
+
+// Reflection
+extension String.Content.${View} : CustomReflectable {
+  public var customMirror: Mirror {
+    return Mirror(self, unlabeledChildren: self)
+  }
+}
+
+extension String.Content.${View} : CustomPlaygroundQuickLookable {
+  public var customPlaygroundQuickLook: PlaygroundQuickLook {
+    return .text(description)
   }
 }
 
