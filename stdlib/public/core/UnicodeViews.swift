@@ -121,7 +121,7 @@ extension RandomAccessUnicodeView : UnicodeView {
 /// Latin1String would might be a simple lazy zero-extended mapping, rather than
 /// something that goes through the transcoding machinery.
 public struct _UnicodeViews<
-  CodeUnits : BidirectionalCollection,
+  CodeUnits : UnicodeView,
   Encoding : UnicodeEncoding
 >
 where Encoding.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element,
@@ -133,7 +133,14 @@ where Encoding.EncodedScalar.Iterator.Element == CodeUnits.Iterator.Element,
   public init(_ codeUnits: CodeUnits, _: Encoding.Type = Encoding.self) {
     self.codeUnits = codeUnits
   }
-
+  /*
+  public init<
+    CodeUnits: RandomAccessCollection
+  >(_ codeUnits: CodeUnits, _: Encoding.Type = Encoding.self) {
+    self.codeUnits = codeUnits
+  }
+  */
+  
   public var codeUnits: CodeUnits
 }
 

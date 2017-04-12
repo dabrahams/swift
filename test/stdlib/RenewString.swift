@@ -705,4 +705,19 @@ suite.test("Latin1.UTF8.transcoding") {
   expectEqualSequence([0xc2, 0xa1], s.utf8)
 }
 
+#if false
+var salvaged = TestSuite("SalvagedFromStringPrototype")
+
+salvaged.test("substring") {
+  let s: String = "hello world"
+  let worldRange: Range = s.index(s.startIndex, offsetBy: 6)..<s.endIndex
+  expectEqualSequence("world" as String, s[worldRange] as Substring)
+  expectEqualSequence("world" as String, s[worldRange] as String)
+
+  var tail = s.dropFirst()
+  expectType(Substring.self, &tail)
+  expectEqualSequence("ello world", tail)
+}
+#endif
+
 runAllTests()
