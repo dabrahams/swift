@@ -34,14 +34,17 @@ struct _Closure<Input, Output> : _Function {
 }
 
 public // @testable
-struct _MapIterator<Unmapped: IteratorProtocol, Transform: _Function>
+struct _MapIterator<
+  Unmapped: IteratorProtocol, Transform: _Function
+> : IteratorProtocol, Sequence
 where Transform.Input == Unmapped.Element
 {
+  public typealias Element = Transform.Output
   public var _unmapped: Unmapped
   public let _transform: Transform
 
   @inline(__always)
-  public mutating func next() -> Transform.Output? {
+  public mutating func next() -> Element? {
     guard let n = _unmapped.next() else { return nil }
     return _transform.apply(n)
   }
@@ -83,9 +86,10 @@ extension _Map${traversal}Collection : ${traversal}Collection {
     _unmapped = base
     _transform = transform
   }
-  
+
+  public typealias Iterator = _MapIterator<Unmapped.Iterator, Transform>
   @inline(__always)
-  public func makeIterator() -> _MapIterator<Unmapped.Iterator, Transform> {
+  public func makeIterator() -> Iterator {
     return _MapIterator(_unmapped.makeIterator(), through: _transform)
   }
 

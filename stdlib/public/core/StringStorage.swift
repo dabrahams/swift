@@ -406,6 +406,28 @@ extension _Latin1StringStorage : UnicodeStorage {
   }
 }
 
+extension _Latin1StringStorage {
+  /// Appends as many elements from the start of `wideLatin1` as possible,
+  /// unless it isn't possible to accomodate `minimumLength` additional
+  /// elements.
+  ///
+  /// - Precondition: `(wideLatin1.max() ?? 0) < 0xff`
+  ///
+  /// - Returns: an iterator to any elements not appended, or `nil` if it is
+  ///   known that there are no elements remaining.
+  public func _appendMaximalPrefix<S: Sequence>(
+    ofWide source: S, ifFreeSpaceIsAtLeast minimumLength: Int = 0
+  ) -> S.Iterator
+  where S.Iterator.Element == UInt16 {
+    _sanityCheck((source.max() ?? 0) <= 0xff)
+    let latin1Units = _MapIterator(
+        source.makeIterator(),
+        through: _UInt8TruncatingBitPatternUTF16CodeUnit())
+    return _appendMaximalPrefix(
+      of: latin1Units, ifFreeSpaceIsAtLeast: minimumLength)._unmapped
+  }
+}
+
 //===--- UTF-8 String Storage ---------------------------------------------===//
 public struct UTF8StringHeader : _BoundedBufferHeader {
   public var count: UInt32

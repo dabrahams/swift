@@ -461,13 +461,10 @@ extension String {
   @effects(readonly)
   @_semantics("string.concat")
   public static func + (lhs: String, rhs: String) -> String {
-    if lhs.isEmpty {
-      return rhs
-    }
+    if lhs.isEmpty { return rhs }
     var lhs = lhs
-    // Before you replace this with append(contentsOf: ), make sure that's just
-    // as efficient in all cases.
-    lhs.replaceSubrange(lhs.endIndex..<lhs.endIndex, with: rhs)
+    lhs.content.appendUTF16(
+      rhs.content.utf16, isKnownLatin1: rhs.content.isKnownLatin1)
     return lhs
   }
 
@@ -475,12 +472,10 @@ extension String {
   public static func += (lhs: inout String, rhs: String) {
     if lhs.isEmpty {
       lhs = rhs
+      return
     }
-    else {
-      // Before you replace this with append(contentsOf: ), make sure that's
-      // just as efficient in all cases.
-      lhs.replaceSubrange(lhs.endIndex..<lhs.endIndex, with: rhs)
-    }
+    lhs.content.appendUTF16(
+      rhs.content.utf16, isKnownLatin1: rhs.content.isKnownLatin1)
   }
 
   /// Constructs a `String` in `resultStorage` containing the given UTF-8.

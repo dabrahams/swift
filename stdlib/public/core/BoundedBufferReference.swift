@@ -119,14 +119,26 @@ extension _BoundedBufferReference {
 extension _BoundedBufferReference {
   @nonobjc
   public init<S : Sequence>(_ elements: S)
-    where S.Iterator.Element == Iterator.Element {
-    self.init(Array(elements))
+  where S.Iterator.Element == Iterator.Element {
+    var me = Self(
+      EmptyCollection(),
+      minimumCapacity: elements.underestimatedCount)
+    
+    var remainder = me._appendMaximalPrefix(of: elements)
+    while let x = remainder.next() {
+      me = Self(me, minimumCapacity: me.capacity * 2 + 1)
+      me.append(x)
+      remainder = me._appendMaximalPrefix(of: IteratorSequence(remainder))._base
+    }
+    self.init(me)
   }
   
   @nonobjc
-  public init<C : Collection>(_ elements: C)
+  public init<C : Collection>(_ elements: C, minimumCapacity: Int = 0)
     where C.Iterator.Element == Iterator.Element {
-    self.init(_uninitializedCount: numericCast(elements.count))
+    self.init(
+      _uninitializedCount: numericCast(elements.count),
+      minimumCapacity: minimumCapacity)
     withUnsafeMutableBufferPointer {
       elements._copyCompleteContents(initializing: $0)
     }
@@ -141,6 +153,22 @@ extension _BoundedBufferReference {
       target,
       with: numericCast(newValues.count),
       elementsOf: newValues)
+  }
+
+  @_inlineable
+  public func _appendMaximalPrefix<S : Sequence>(
+    of newElements: S, ifFreeSpaceIsAtLeast n: Int = 0
+  ) -> S.Iterator
+  where S.Iterator.Element == Iterator.Element {
+    let freeSpace = capacity - count
+    if _slowPath(n > freeSpace) { return newElements.makeIterator() }
+    defer { _fixLifetime(self) }
+
+    let (r, copiedCount) =  newElements._copyContents(
+      initializing: UnsafeMutableBufferPointer(
+        start: _baseAddress + count, count: freeSpace))
+    count += copiedCount
+    return r
   }
   
   public func replaceSubrange<C>(
