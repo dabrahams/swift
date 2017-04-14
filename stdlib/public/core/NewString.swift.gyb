@@ -195,6 +195,11 @@ extension String : RangeReplaceableCollection {
   ) where C.Iterator.Element == Character {
     content.replaceSubrange(target, with: replacement)
   }
+
+  public mutating func append<S: Sequence>(contentsOf newElements: S)
+  where S.Iterator.Element == Character {
+    content.append(contentsOf: newElements)
+  }
 }
 
 
@@ -818,26 +823,114 @@ extension String.Content {
   ) where C.Iterator.Element == Character {
     // Fastest path: the rhs is already a string
     if let s = replacement as? String {
-      replaceUTF16(target, with: s.content.utf16)
+      replaceUTF16(
+        target, with: s.content.utf16,
+        replacementIsKnownLatin1: s.content.isKnownLatin1
+      )
     }
     // Fast path: the incoming characters are Unicode
-    else if let unicodeReplacement = replacement as? AnyUnicode {
-      replaceUTF16(target, with: unicodeReplacement.anyContent.anyUTF16)
+    else if let s = replacement as? AnyUnicode {
+      replaceUTF16(
+        target, with: s.anyContent.anyUTF16,
+        replacementIsKnownLatin1: s.anyContent.isKnownLatin1
+      )
     }
     else {
       // Slow path: we have to reconstruct UTF-16 from Characters
-      replaceUTF16(target, with: replacement.lazy.flatMap { $0.utf16 })
+      replaceUTF16(
+        target, with: replacement.lazy.flatMap { $0.utf16 },
+        replacementIsKnownLatin1: false
+      )
     }
   }
 
+  public mutating func append<S: Sequence>(contentsOf newElements: S)
+  where S.Iterator.Element == Character {
+    // Fastest path: the rhs is already a string
+    if let s = newElements as? String {
+      appendUTF16(s.content.utf16, isKnownLatin1: s.content.isKnownLatin1)
+    }
+    // Fast path: the incoming characters are Unicode
+    else if let s = newElements as? AnyUnicode {
+      appendUTF16(
+        s.anyContent.anyUTF16, isKnownLatin1: s.anyContent.isKnownLatin1)
+    }
+    else {
+      // Slow path: we have to reconstruct UTF-16 from Characters
+      appendUTF16(
+        newElements.lazy.flatMap { $0.utf16 }, isKnownLatin1: false)
+    }
+  }
+
+  internal mutating func appendUTF16<S: Sequence>(
+    _ source: S, ofLengthAtLeast minSourceCount: Int = 0,
+    isKnownLatin1 knownLatin1: Bool = false
+  ) where S.Iterator.Element == UTF16.CodeUnit {
+    let isMutable = self.isMutable // grab this before bumping any refcounts.
+    var remainder = source.makeIterator()
+    let oldCount = utf16.count
+    let minFinalCount = oldCount + minSourceCount
+    
+    if _fastPath(_latin1 != nil), var storage = _latin1 {
+      let sourceIsKnownLatin1 = _fastPath(knownLatin1)
+      || source._preprocessingPass { (source.max() ?? 0) < 0xff } ?? false
+
+
+      // If we know the elements fit in Latin-1 storage...
+      if _fastPath(sourceIsKnownLatin1) {
+        // If storage is mutable and not too small, append as much as we can
+        if _fastPath(isMutable) { 
+          remainder = storage._appendMaximalPrefix(
+            ofWide: source, ifFreeSpaceIsAtLeast: minSourceCount)
+        }
+
+        while let x = remainder.next() {
+          // Something didn't fit; grow the storage as needed.
+          let newStorage = _Latin1StringStorage(
+            storage, minimumCapacity: storage.capacity << 1 + 1)
+          storage = newStorage
+          storage.append(UInt8(truncatingBitPattern: x))
+          remainder = storage._appendMaximalPrefix(
+            ofWide: IteratorSequence(remainder))._base
+          _rep = .latin1(storage)
+        }
+        return
+      }
+      // Note: there's currently no provision for appending elements one at a
+      // time and only giving up on Latin-1 when a code unit > 0xff is found.
+      // If minSourceCount was less than the actual count (usually because the
+      // source was not a collection), we will end up widening to the UTF16
+      // representation.
+    }
+    
+    // If storage is mutable and not too small, append as much as we can
+    if _fastPath(isMutable && _utf16 != nil), let storage = _utf16 {
+      remainder = storage._appendMaximalPrefix(
+        of: IteratorSequence(remainder),
+        ifFreeSpaceIsAtLeast: minSourceCount)._base
+    }
+    
+    while let x = remainder.next() {
+      // Something didn't fit; grow storage as needed
+      var storage = _UTF16StringStorage(
+        utf16, minimumCapacity:
+        utf16.count < minFinalCount ? minFinalCount : utf16.count << 1)
+      storage.append(x)
+      remainder = storage._appendMaximalPrefix(
+        of: IteratorSequence(remainder))._base
+      _rep = .utf16(storage)
+    }
+  }
+  
   /// Replaces the `target` subrange with the given UTF-16 encoded content.
   internal mutating func replaceUTF16<C: Collection>(
-    _ target: Range<String.Index>, with replacement_: C
-  )  
+    _ target: Range<String.Index>, with replacement_: C,
+    replacementIsKnownLatin1: Bool = false
+  )
   where C.Iterator.Element == UTF16.CodeUnit {
     // Pre-count replacement, once.
     let replacement = Counted(replacement_)
-
+    
     // Try to do in-place replacement
     if _fastPath(replaceUTF16InPlace(target, with: replacement)) {
       return
@@ -855,8 +948,8 @@ extension String.Content {
     let minimumCapacity = newCount > oldCapacity ? oldCapacity * 2 : 0
 
     // See if we can use 8-bit code units
-    if replacement._isLatin1() && (
-      isKnownLatin1 || head._isLatin1() && tail._isLatin1()
+    if (replacementIsKnownLatin1 || replacement._isLatin1()) && (
+      self.isKnownLatin1 || head._isLatin1() && tail._isLatin1()
     ) {
       // FIXME: check to see if we can use the inline5or6 representation.
       let s = _Latin1StringStorage(
@@ -945,7 +1038,10 @@ extension Substring : BidirectionalCollectionWrapper, Unicode {
         content: Content(wholeContent: content._wholeContent, bounds: bounds))
     }
     set {
-      content._wholeContent.replaceUTF16(bounds, with: newValue.content.utf16)
+      content._wholeContent.replaceUTF16(
+        bounds,
+        with: newValue.content.utf16,
+        replacementIsKnownLatin1: newValue.content.isKnownLatin1)
     }
   }
 
@@ -1418,9 +1514,20 @@ extension String.Content.${View} : RangeReplaceableCollection {
   public mutating func replaceSubrange<C: Collection>(
     _ target: Range<Index>, with replacement: C
   ) where C.Iterator.Element == ${Element} {
+    // Fastest path: the replacement is a String view
+    if let s = replacement as? String.Content.${View} {
+      content.replaceUTF16(
+        target,
+        with: s.content.utf16,
+        replacementIsKnownLatin1: s.content.isKnownLatin1)
+    }
     // Fast path: the incoming characters are Unicode
-    if let unicodeReplacement = replacement as? AnyUnicode {
-      content.replaceUTF16(target, with: unicodeReplacement.anyContent.anyUTF16)
+    else if let s = replacement as? AnyUnicode {
+      // Note: this case is currently handling Substring views, which could have
+      // their own case.
+      content.replaceUTF16(
+        target, with: s.anyContent.anyUTF16,
+        replacementIsKnownLatin1: s.anyContent.isKnownLatin1)
     }
     else {
       % if view == 'utf8':
@@ -1453,7 +1560,8 @@ extension String.Content {
     }
     set {
       // Probably not the most efficient implementation, but it should work.
-      replaceUTF16(utf16.startIndex..<utf16.endIndex, with: EmptyCollection())
+      replaceUTF16(
+        utf16.startIndex..<utf16.endIndex, with: EmptyCollection())
       let target = utf16.startIndex..<utf16.endIndex
       % if view == 'utf8':
       UTF8.parseForward(newValue) {
