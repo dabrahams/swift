@@ -142,6 +142,18 @@ extension _BoundedBufferReference {
       with: numericCast(newValues.count),
       elementsOf: newValues)
   }
+
+  @_inlineable
+  public mutating func append<S : Sequence>(contentsOf newElements: S)
+    where S.Iterator.Element == Iterator.Element {
+    defer { _fixLifetime(self) }
+
+    newElements.copyContents(initializing: )
+    for element in newElements {
+      append(element)
+    }
+  }
+
   
   public func replaceSubrange<C>(
     _ target: Range<Int>,
