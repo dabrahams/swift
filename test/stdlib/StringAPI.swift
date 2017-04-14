@@ -328,24 +328,29 @@ StringTests.test("SameTypeComparisons") {
   expectFalse(xs != xs)
 }
 
-StringTests.test("CompareStringsWithUnpairedSurrogates")
-.xfail(
-  .custom(
-    { true },
-    reason: "FIXME: we don't handle slice boundaries properly yet"))
-.code {
+StringTests.test("CompareStringsWithUnpairedSurrogates") {
   let donor = "abcdef"
   let acceptor = "\u{1f601}\u{1f602}\u{1f603}"
 
+  // Michael NOTE: String(Substring())
   expectEqual("\u{fffd}\u{1f602}\u{fffd}",
     String(
       acceptor[
-        donor.index(donor.startIndex, offsetBy: 1) ..<
-        donor.index(donor.startIndex, offsetBy: 5)
-      ]
-    )
-  )
+        donor.index(donor.startIndex, offsetBy: 1)
+        ..< donor.index(donor.startIndex, offsetBy: 5)]))
 }
+
+StringTests.test("MisalignedSliceBoundaries")
+.xfail(
+  .custom({ true },
+    reason: "we don't adjust these to the right granularity yet"))
+.code {
+  let threeEmoji = "\u{1f601}\u{1f602}\u{1f603}"
+  let donor = threeEmoji.content.utf16.dropFirst().dropLast()
+  expected: [Character] = ["\u{fffd}", "\u{1f602}", "\u{fffd}"]
+  expectEqualSequence(expected, threeEmoji[donor.startIndex..<donor.endIndex])
+}
+
 
 var CStringTests = TestSuite("CStringTests")
 

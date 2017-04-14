@@ -132,7 +132,14 @@ extension _BoundedBufferReference {
     }
     self.init(me)
   }
-  
+
+  // WORKAROUND: https://bugs.swift.org/browse/SR-4596
+  @nonobjc
+  public init<C : Collection>(_ elements: C)
+  where C.Iterator.Element == Iterator.Element {
+    self.init(elements, minimumCapacity: 0)
+  }
+
   @nonobjc
   public init<C : Collection>(_ elements: C, minimumCapacity: Int = 0)
     where C.Iterator.Element == Iterator.Element {
