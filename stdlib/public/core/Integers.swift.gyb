@@ -2986,6 +2986,8 @@ ${operatorComment(x.operator, True)}
   public init(bigEndian value: ${Self}) {
 %   if bits <= 8:
     self = value
+%   elif (bits & ~(bits - 1)) != bits:
+    fatalError("Byteswap of odd-sized integers not supported")
 %   else:
 #if _endian(big)
     self = value
@@ -3007,6 +3009,8 @@ ${operatorComment(x.operator, True)}
   public init(littleEndian value: ${Self}) {
 %   if bits <= 8:
     self = value
+%   elif (bits & ~(bits - 1)) != bits:
+    fatalError("Byteswap of odd-sized integers not supported")
 %   else:
 #if _endian(little)
     self = value
@@ -3026,6 +3030,8 @@ ${operatorComment(x.operator, True)}
   public var bigEndian: ${Self} {
 %   if bits <= 8:
     return self
+%   elif (bits & ~(bits - 1)) != bits:
+    fatalError("Byteswap of odd-sized integers not supported")
 %   else:
 #if _endian(big)
     return self
@@ -3045,6 +3051,8 @@ ${operatorComment(x.operator, True)}
   public var littleEndian: ${Self} {
 %   if bits <= 8:
     return self
+%   elif (bits & ~(bits - 1)) != bits:
+    fatalError("Byteswap of odd-sized integers not supported")
 %   else:
 #if _endian(little)
     return self
@@ -3058,6 +3066,8 @@ ${operatorComment(x.operator, True)}
   public var byteSwapped: ${Self} {
 %   if bits <= 8:
     return self
+%   elif (bits & ~(bits - 1)) != bits:
+    fatalError("Byteswap of odd-sized integers not supported")
 %   else:
     return ${Self}(Builtin.int_bswap_${BuiltinName}(_value))
 %   end
