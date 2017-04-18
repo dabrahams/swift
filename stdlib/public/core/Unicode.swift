@@ -665,30 +665,30 @@ internal func _transcodeSomeUTF16AsUTF8<Input>(
     var utf16Length: Input.IndexDistance = 1
 
     if _fastPath(u <= 0x7f) {
-      result |= _UTF8Chunk(u) << shift
+      result |= _UTF8Chunk(u) &<< shift
       utf8Count += 1
     } else {
       var scalarUtf8Length: Int
       var r: UInt
-      if _fastPath((u >> 11) != 0b1101_1) {
+      if _fastPath((u &>> 11) != 0b1101_1) {
         // Neither high-surrogate, nor low-surrogate -- well-formed sequence
         // of 1 code unit, decoding is trivial.
         if u < 0x800 {
           r = 0b10__00_0000__110__0_0000
-          r |= u >> 6
-          r |= (u & 0b11_1111) << 8
+          r |= u &>> 6
+          r |= (u & 0b11_1111) &<< 8
           scalarUtf8Length = 2
         }
         else {
           r = 0b10__00_0000__10__00_0000__1110__0000
-          r |= u >> 12
-          r |= ((u >> 6) & 0b11_1111) << 8
-          r |= (u        & 0b11_1111) << 16
+          r |= u &>> 12
+          r |= ((u &>> 6) & 0b11_1111) &<< 8
+          r |= (u         & 0b11_1111) &<< 16
           scalarUtf8Length = 3
         }
       } else {
         let unit0 = u
-        if _slowPath((unit0 >> 10) == 0b1101_11) {
+        if _slowPath((unit0 &>> 10) == 0b1101_11) {
           // `unit0` is a low-surrogate.  We have an ill-formed sequence.
           // Replace it with U+FFFD.
           r = 0xbdbfef
@@ -700,16 +700,16 @@ internal func _transcodeSomeUTF16AsUTF8<Input>(
           scalarUtf8Length = 3
         } else {
           let unit1 = UInt(input[input.index(nextIndex, offsetBy: 1)])
-          if _fastPath((unit1 >> 10) == 0b1101_11) {
+          if _fastPath((unit1 &>> 10) == 0b1101_11) {
             // `unit1` is a low-surrogate.  We have a well-formed surrogate
             // pair.
-            let v = 0x10000 + (((unit0 & 0x03ff) << 10) | (unit1 & 0x03ff))
+            let v = 0x10000 + (((unit0 & 0x03ff) &<< 10) | (unit1 & 0x03ff))
 
             r = 0b10__00_0000__10__00_0000__10__00_0000__1111_0__000
-            r |= v >> 18
-            r |= ((v >> 12) & 0b11_1111) << 8
-            r |= ((v >> 6) & 0b11_1111) << 16
-            r |= (v        & 0b11_1111) << 24
+            r |= v &>> 18
+            r |= ((v &>> 12) & 0b11_1111) &<< 8
+            r |= ((v &>> 6)  & 0b11_1111) &<< 16
+            r |= (v          & 0b11_1111) &<< 24
             scalarUtf8Length = 4
             utf16Length = 2
           } else {
@@ -724,14 +724,14 @@ internal func _transcodeSomeUTF16AsUTF8<Input>(
       if utf8Count + scalarUtf8Length > utf8Max {
         break
       }
-      result |= numericCast(r) << shift
+      result |= numericCast(r) &<< shift
       utf8Count += scalarUtf8Length
     }
     nextIndex = input.index(nextIndex, offsetBy: utf16Length)
   }
   // FIXME: Annoying check, courtesy of <rdar://problem/16740169>
   if utf8Count < MemoryLayout.size(ofValue: result) {
-    result |= ~0 << numericCast(utf8Count * 8)
+    result |= ~0 &<< numericCast(utf8Count * 8)
   }
   return (nextIndex, result)
 }
@@ -762,14 +762,14 @@ extension UTF8.CodeUnit : _StringElement {
   public // @testable
   static func _toUTF16CodeUnit(_ x: UTF8.CodeUnit) -> UTF16.CodeUnit {
     _sanityCheck(x <= 0x7f, "should only be doing this with ASCII")
-    return UTF16.CodeUnit(x)
+    return UTF16.CodeUnit(extendingOrTruncating: x)
   }
   public // @testable
   static func _fromUTF16CodeUnit(
     _ utf16: UTF16.CodeUnit
   ) -> UTF8.CodeUnit {
     _sanityCheck(utf16 <= 0x7f, "should only be doing this with ASCII")
-    return UTF8.CodeUnit(utf16)
+    return UTF8.CodeUnit(extendingOrTruncating: utf16)
   }
 }
 
@@ -822,7 +822,8 @@ extension UTF16 {
   /// - SeeAlso: `UTF16.width(_:)`, `UTF16.trailSurrogate(_:)`
   public static func leadSurrogate(_ x: UnicodeScalar) -> UTF16.CodeUnit {
     _precondition(width(x) == 2)
-    return UTF16.CodeUnit((x.value - 0x1_0000) >> (10 as UInt32)) + 0xD800
+    return 0xD800 + UTF16.CodeUnit(extendingOrTruncating:
+      (x.value - 0x1_0000) &>> (10 as UInt32))
   }
 
   /// Returns the low-surrogate code unit of the surrogate pair representing
@@ -846,9 +847,8 @@ extension UTF16 {
   /// - SeeAlso: `UTF16.width(_:)`, `UTF16.leadSurrogate(_:)`
   public static func trailSurrogate(_ x: UnicodeScalar) -> UTF16.CodeUnit {
     _precondition(width(x) == 2)
-    return UTF16.CodeUnit(
-      (x.value - 0x1_0000) & (((1 as UInt32) << 10) - 1)
-    ) + 0xDC00
+    return 0xDC00 + UTF16.CodeUnit(extendingOrTruncating:
+      (x.value - 0x1_0000) & (((1 as UInt32) &<< 10) - 1))
   }
 
   /// Returns a Boolean value indicating whether the specified code unit is a

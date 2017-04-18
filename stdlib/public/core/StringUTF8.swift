@@ -168,7 +168,7 @@ extension String {
 
   public typealias UTF8View = Content.UTF8View
 
-  // /// A UTF-8 encoding of `self`.
+  /// A UTF-8 encoding of `self`.
   public var utf8: UTF8View {
     get {
       return self.content.utf8

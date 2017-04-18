@@ -1074,7 +1074,8 @@ IRGenSILFunction::IRGenSILFunction(IRGenModule &IGM,
   if (IGM.IRGen.Opts.Sanitize == SanitizerKind::Address)
     CurFn->addFnAttr(llvm::Attribute::SanitizeAddress);
   if (IGM.IRGen.Opts.Sanitize == SanitizerKind::Thread) {
-    if (dyn_cast_or_null<DestructorDecl>(f->getDeclContext()))
+    auto declContext = f->getDeclContext();
+    if (declContext && isa<DestructorDecl>(declContext))
       // Do not report races in deinit and anything called from it
       // because TSan does not observe synchronization between retain
       // count dropping to '0' and the object deinitialization.
@@ -3293,7 +3294,7 @@ void IRGenSILFunction::emitErrorResultVar(SILResultInfo ErrorInfo,
                                 Var.Name, Var.ArgNo);
   DebugTypeInfo DTI(nullptr, nullptr, ErrorInfo.getType(),
                     ErrorResultSlot->getType(), IGM.getPointerSize(),
-                    IGM.getPointerAlignment());
+                    IGM.getPointerAlignment(), true);
   IGM.DebugInfo->emitVariableDeclaration(Builder, Storage, DTI, getDebugScope(),
                                          nullptr, Var.Name, Var.ArgNo,
                                          IndirectValue, ArtificialValue);

@@ -187,12 +187,13 @@ extension String {
   ///   - uppercase: Pass `true` to use uppercase letters to represent numerals
   ///     greater than 9, or `false` to use lowercase letters. The default is
   ///     `false`.
-  public init<T : _SignedInteger>(
+  // FIXME(integers): support a more general BinaryInteger protocol
+  public init<T : FixedWidthInteger>(
     _ value: T, radix: Int = 10, uppercase: Bool = false
   ) {
     _precondition(radix > 1, "Radix must be greater than 1")
     self = _int64ToString(
-      value.toIntMax(), radix: Int64(radix), uppercase: uppercase)
+      Int64(value), radix: Int64(radix), uppercase: uppercase)
   }
   
   /// Creates a string representing the given value in base 10, or some other
@@ -224,11 +225,12 @@ extension String {
   ///   - uppercase: Pass `true` to use uppercase letters to represent numerals
   ///     greater than 9, or `false` to use lowercase letters. The default is
   ///     `false`.
-  public init<T : UnsignedInteger>(
+  // FIXME(integers): support a more general BinaryInteger protocol
+  public init<T : FixedWidthInteger>(
     _ value: T, radix: Int = 10, uppercase: Bool = false
-  ) {
+  ) where T : UnsignedInteger {
     _precondition(radix > 1, "Radix must be greater than 1")
     self = _uint64ToString(
-      value.toUIntMax(), radix: Int64(radix), uppercase: uppercase)
+      UInt64(value), radix: Int64(radix), uppercase: uppercase)
   }
 }
