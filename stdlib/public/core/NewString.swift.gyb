@@ -546,25 +546,6 @@ extension UnsignedInteger {
   }
 }
 
-/// Add the missing shift operators
-extension UnsignedInteger {
-  // HACK: divide the shift amount into two parts for more-resilient shifting.
-  // This will work for the bit packing code I'm currently working on but is not
-  // very general (doesn't handle shift amounts >= 2N where N is the number of
-  // bits).  Smart shifts from the new-integer-protocols work should solve this
-  // in a more principled way.
-  public static func <<(lhs: Self, rhs: Self) -> Self {
-    let r = rhs.toUIntMax()
-    return Self(
-      ((lhs.toUIntMax() << (r >> 1)) << ((r + 1) >> 1)) & (~(0 as Self)).toUIntMax())
-  }
-  public static func >>(lhs: Self, rhs: Self) -> Self {
-    let r = rhs.toUIntMax()
-    return Self(
-      ((lhs.toUIntMax() >> (r >> 1)) >> ((r + 1) >> 1)) & (~(0 as Self)).toUIntMax())
-  }
-}
-
 //===----------------------------------------------------------------------===//
 // WORKAROUND: https://bugs.swift.org/browse/SR-4370
 extension UnsignedInteger {
