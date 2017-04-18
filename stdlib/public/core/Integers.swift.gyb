@@ -3170,13 +3170,7 @@ extension ${Self} {
   @available(swift, obsoleted: 4.0, renamed: "init(extendingOrTruncating:)")
   @_transparent
   public init(truncatingBitPattern source: ${Src}) {
-    let src = source._value
-%     if self_type.bits == src_type.bits:
-    let dstNotWord = src
-%     else:
-    let dstNotWord = Builtin.trunc_Int${srcBits}_Int${bits}(src)
-%     end
-    self._value = dstNotWord
+    self = ${Self}(extendingOrTruncating: source)
   }
 }
 %   end
