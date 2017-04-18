@@ -524,20 +524,20 @@ extension Collection where Iterator.Element == UTF16.CodeUnit {
 ///   in its segment.  The result is that we cannot represent a source sequence 
 ///   ending with the least-common value, and the most common values are
 ///   still very likely to be representable in any partial segment.
-extension UnsignedInteger {
+extension UnsignedInteger where Self : FixedWidthInteger {
   public init?<C: Collection>(packing source: C, bitsPerElement: Self)
   where C.Iterator.Element : UnsignedInteger {
     // print("Packing \(Array(source)) into \(bitsPerElement) bits per element")
     var r: Self = 0
     var lastSegment: Self = 1
     var shift: Self = 0
-    let mask = ~(0 as Self) << bitsPerElement
+    let mask = ~(0 as Self) &<< bitsPerElement
     for x in source {
       let x1 = numericCast(x) as Self
       if x1 & mask != 0 { return nil } // value too large to represent
-      let segment = (x1 &+ 1) & ~mask
-      r |= segment << shift
-      if r >> shift != segment { return nil } // not enough bits
+      let segment = (x1 &+ (1 as Self)) & ~mask
+      r |= (segment &<< (shift/2)) &<< ((shift+1)/2)
+      if r &>> shift != segment { return nil } // not enough bits
       lastSegment = segment
       shift += bitsPerElement
     }
@@ -548,7 +548,7 @@ extension UnsignedInteger {
 
 //===----------------------------------------------------------------------===//
 // WORKAROUND: https://bugs.swift.org/browse/SR-4370
-extension UnsignedInteger {
+extension UnsignedInteger where Self : FixedWidthInteger {
   static func _packing<C: Collection>(_ source: C, bitsPerElement: Self) -> Self?
   where C.Iterator.Element : UnsignedInteger {
     return Self(packing: source, bitsPerElement: bitsPerElement)
@@ -566,7 +566,8 @@ extension UInt61 {
 //===----------------------------------------------------------------------===//
 
 public struct PackedUnsignedIntegers<
-  Representation : UnsignedInteger, Element : UnsignedInteger
+  Representation : UnsignedInteger & FixedWidthInteger,
+  Element : UnsignedInteger & FixedWidthInteger
 > {
   public init?<C: Collection>(
     _ c: C,
@@ -602,10 +603,10 @@ extension PackedUnsignedIntegers : Sequence {
 
       // Zero means empty, so we bias every element by 1
       let bias: Representation = 1
-      let mask = (1 << shift) &- 1
+      let mask = ((1 &<< (shift/2)) &<< ((shift+1)/2)) &- 1
 
       let result = mask & (bits &- bias)
-      bits = bits >> shift
+      bits = (bits &>> (shift/2)) &>> ((shift+1)/2)
       return numericCast(result)
     }
 
