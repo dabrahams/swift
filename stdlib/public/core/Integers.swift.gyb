@@ -3225,6 +3225,14 @@ public func numericCast<T : BinaryInteger, U : BinaryInteger>(_ x: T) -> U {
   return U(x)
 }
 
+postfix operator ^
+
+extension BinaryInteger {
+  @_transparent
+  internal static postfix func ^ <U : BinaryInteger>(_ x: Self) -> U {
+    return U(x)
+  }
+}
 
 //===----------------------------------------------------------------------===//
 //===--- DoubleWidth ------------------------------------------------------===//
