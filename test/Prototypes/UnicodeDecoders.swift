@@ -35,6 +35,157 @@ extension UnicodeScalar {
 }
 //===----------------------------------------------------------------------===//
 
+@_fixed_layout
+public struct _UIntBuffer<
+  Storage: UnsignedInteger & FixedWidthInteger, 
+  Element: UnsignedInteger & FixedWidthInteger
+> {
+  @_versioned
+  var _storage: Storage
+  @_versioned
+  var _length: UInt8
+}
+
+extension _UIntBuffer : Sequence {
+  @_fixed_layout
+  public struct Iterator : IteratorProtocol {
+    @inline(__always)
+    public init(_ x: _UIntBuffer) { _impl = x }
+    
+    @inline(__always)
+    public mutating func next() -> Element? {
+      if _impl._length == 0 { return nil }
+      defer {
+        _impl._storage = _impl._storage &>> Element.bitWidth
+        _impl._length = _impl._length &- 1
+      }
+      return Element(extendingOrTruncating: _impl._storage)
+    }
+    @_versioned
+    var _impl: _UIntBuffer
+  }
+  
+    @inline(__always)
+  public func makeIterator() -> Iterator {
+    return Iterator(self)
+  }
+}
+
+extension _UIntBuffer : Collection {
+  public typealias _Element = Element
+  public typealias Index = UInt8
+  public var startIndex : Index {
+    @inline(__always)
+    get { return 0 }
+  }
+  public var endIndex : Index {
+    @inline(__always)
+    get { return _length }
+  }
+  @inline(__always)
+  public func index(after i: Index) -> Index { return i &+ 1 }
+  
+  public subscript(i: Index) -> Element {
+    @inline(__always)
+    get {
+      return Element(
+        extendingOrTruncating:
+          _storage &>> (UInt8(Element.bitWidth) &* i))
+    }
+  }
+}
+
+extension _UIntBuffer : BidirectionalCollection {
+  @inline(__always)
+  public func index(before i: Index) -> Index { return i &- 1 }
+}
+
+extension _UIntBuffer : RandomAccessCollection {
+  public typealias IndexDistance = Int
+  @inline(__always)
+  public func index(i: UInt8, offsetBy n: IndexDistance) -> UInt8 {
+    return UInt8(extendingOrTruncating: IndexDistance(i) &+ n)
+  }
+
+  @inline(__always)
+  public func distance(from i: UInt8, to j: UInt8) -> IndexDistance {
+    return IndexDistance(j) &- IndexDistance(i)
+  }
+}
+
+extension FixedWidthInteger {
+  @inline(__always)
+  @_versioned
+  func _fullShiftLeft<N: FixedWidthInteger>(_ n: N) -> Self {
+    return (self &<< ((n &+ 1) &>> 1)) &<< (n &>> 1)
+  }
+  @inline(__always)
+  @_versioned
+  func _fullShiftRight<N: FixedWidthInteger>(_ n: N) -> Self {
+    return (self &>> ((n &+ 1) &>> 1)) &>> (n &>> 1)
+  }
+  @inline(__always)
+  @_versioned
+  static func _lowBits<N: FixedWidthInteger>(_ n: N) -> Self {
+    return ~((~0 as Self)._fullShiftLeft(n))
+  }
+}
+
+extension Range {
+  @inline(__always)
+  @_versioned
+  func _contains(_ other: Range) -> Bool {
+    return other.clamped(to: self) == other
+  }
+}
+
+extension _UIntBuffer : RangeReplaceableCollection {
+  @inline(__always)
+  public init() {
+    _storage = 0
+    _length = 0
+  }
+
+  public var capacity: Int {
+    return Storage.bitWidth / Element.bitWidth
+  }
+
+  @inline(__always)
+  public mutating func append(_ newElement: Element) {
+    _debugPrecondition(count < capacity)
+    _storage |= Storage(newElement) &<< (count &* Element.bitWidth)
+    _length = _length &+ 1
+  }
+  
+  @inline(__always)
+  public mutating func replaceSubrange<C: Collection>(
+    _ target: Range<Index>, with replacement: C
+  ) where C._Element == Element {
+    _debugPrecondition((0..<_length)._contains(target))
+    
+    let replacement1 = _UIntBuffer(replacement)
+
+    let targetCount = distance(
+      from: target.lowerBound, to: target.upperBound)
+    let growth = replacement1.count &- targetCount
+    _debugPrecondition(count + growth <= capacity)
+
+    let headCount = distance(from: startIndex, to: target.lowerBound)
+    let tailOffset = distance(from: startIndex, to: target.upperBound)
+
+    let w = Element.bitWidth
+    let headBits = _storage & ._lowBits(headCount &* w)
+    let tailBits = _storage._fullShiftRight(tailOffset &* w)
+
+    _storage = headBits
+    _storage |= replacement1._storage &<< (headCount &* w)
+    _storage |= tailBits &<< ((tailOffset &+ growth) &* w)
+    _length = UInt8(
+      extendingOrTruncating: IndexDistance(_length) &+ growth)
+  }
+}
+//===----------------------------------------------------------------------===//
+
 public enum Unicode {
   public typealias UTF8 = Swift.UTF8
   public typealias UTF16 = Swift.UTF16
@@ -57,13 +208,13 @@ extension Unicode {
 }
 
 public protocol UnicodeDecoder {
-  associatedtype BufferLength : BinaryInteger
   associatedtype CodeUnit : UnsignedInteger, FixedWidthInteger
+  associatedtype Buffer : Collection where Buffer.Iterator.Element == CodeUnit
+  
   init()
 
-  /// How many code units are buffered in the decoder
-  var bufferLength: BufferLength { get }
-  
+  var buffer: Buffer { get }
+
   mutating func parseOne<I : IteratorProtocol>(
     _ input: inout I
   ) -> Unicode.ParseResult<UInt32> where I.Element == CodeUnit
@@ -109,19 +260,21 @@ public protocol UnicodeEncoding {
 }
 
 
-internal protocol _UTF8Decoder : UnicodeDecoder {
-  init()
-  var _buffer: UInt32 { get set }
-  var _bitsInBuffer: UInt8 { get set }
-  
+public protocol _UTF8Decoder : UnicodeDecoder {
   func _validateBuffer() -> (valid: Bool, length: UInt8)
+  var buffer: Buffer { get set }
 }
 
-extension _UTF8Decoder {
-  public var bufferLength: UInt8 { return _bitsInBuffer / 8 }
-}
+extension _UTF8Decoder where Buffer == _UIntBuffer<UInt32, UInt8>  {
+  var _buffer : UInt32 {
+    get { return buffer._storage }
+    set { buffer._storage = newValue }
+  }
+  var _bitsInBuffer : UInt8 {
+    get { return buffer._length }
+    set { buffer._length = newValue }
+  }
 
-extension _UTF8Decoder {
   public mutating func parseOne<I : IteratorProtocol>(
     _ input: inout I
   ) -> Unicode.ParseResult<UInt32> where I.Element == Unicode.UTF8.CodeUnit {
@@ -182,15 +335,14 @@ extension _UTF8Decoder {
 
 extension Unicode.UTF8 : UnicodeEncoding {
   public struct ForwardDecoder {
-    public init() { _buffer = 0; _bitsInBuffer = 0 }
-    var _buffer: UInt32
-    var _bitsInBuffer: UInt8
+    public typealias Buffer = _UIntBuffer<UInt32, UInt8>
+    public init() { buffer = Buffer() }
+    public var buffer: Buffer
   }
-
   public struct ReverseDecoder {
-    public init() { _buffer = 0; _bitsInBuffer = 0 }
-    var _buffer: UInt32
-    var _bitsInBuffer: UInt8
+    public typealias Buffer = _UIntBuffer<UInt32, UInt8>
+    public init() { buffer = Buffer() }
+    public var buffer: Buffer
   }
 }
 
