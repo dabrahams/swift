@@ -26,11 +26,13 @@ public protocol _UnicodeEncoding {
 
   /// Converts from encoding-independent to encoded representation
   static func encode(_ content: UnicodeScalar) -> EncodedScalar
+}
 
+public protocol _UnicodeEncoding_ {
   associatedtype ForwardParser : UnicodeParser
   associatedtype ReverseParser : UnicodeParser
 }
 
-public protocol UnicodeEncoding : _UnicodeEncoding
+public protocol UnicodeEncoding : _UnicodeEncoding_
 where ForwardParser.Encoding == Self, ReverseParser.Encoding == Self {}
 
