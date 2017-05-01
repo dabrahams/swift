@@ -170,7 +170,7 @@ extension _UIntBuffer : RangeReplaceableCollection {
 
   @inline(__always)
   public mutating func append(_ newElement: Element) {
-    _debugPrecondition(count < capacity)
+    _debugPrecondition(count + 1 <= capacity)
     _storage |= Storage(newElement) &<< _bitCount
     _bitCount = _bitCount &+ _elementWidth
   }

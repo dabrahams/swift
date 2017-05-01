@@ -9,7 +9,7 @@
 // See https://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
 //
 //===----------------------------------------------------------------------===//
-extension _Unicode.UTF16 : _UTFEncoding {
+extension _Unicode.UTF16 : UnicodeEncoding, _UTFEncoding {
   public typealias EncodedScalar = _UIntBuffer<UInt32, UInt16>
 
   public static var encodedReplacementCharacter : EncodedScalar {
