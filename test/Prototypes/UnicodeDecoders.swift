@@ -39,117 +39,12 @@ extension UnicodeScalar {
 }
 //===----------------------------------------------------------------------===//
 
-public enum _Unicode {
+extension _Unicode {
   public typealias UTF8 = Swift.UTF8
   public typealias UTF16 = Swift.UTF16
   public typealias UTF32 = Swift.UTF32
 }
 
-extension _Unicode {
-  public enum ParseResult<T> {
-  case valid(T)
-  case emptyInput
-  case invalid(length: Int)
-
-    var isEmpty : Bool {
-      switch self {
-      case .emptyInput: return true
-      default: return false
-      }
-    }
-  }
-}
-
-public protocol _UnicodeEncodingBase {
-  /// The basic unit of encoding
-  associatedtype CodeUnit : UnsignedInteger, FixedWidthInteger
-  
-  /// A valid scalar value as represented in this encoding
-  associatedtype EncodedScalar : BidirectionalCollection
-    where EncodedScalar.Iterator.Element == CodeUnit
-
-  /// The replacement character U+FFFD as represented in this encoding
-  static var encodedReplacementCharacter : EncodedScalar { get }
-
-  /// Converts from encoded to encoding-independent representation
-  static func decode(_ content: EncodedScalar) -> UnicodeScalar
-
-  /// Converts from encoding-independent to encoded representation
-  static func encode(_ content: UnicodeScalar) -> EncodedScalar
-}
-
-/// Types that separate streams of code units into encoded unicode scalar values
-public protocol UnicodeParser {
-  /// The encoding with which this parser is associated
-  associatedtype Encoding : _UnicodeEncodingBase
-
-  init()
-
-  /// Parses a single Unicode scalar value from `input`.
-  mutating func parseScalar<I : IteratorProtocol>(
-    from input: inout I
-  ) -> _Unicode.ParseResult<Encoding.EncodedScalar>
-  where I.Element == Encoding.CodeUnit
-}
-
-public protocol _UnicodeEncoding : _UnicodeEncodingBase {
-  associatedtype ForwardParser : UnicodeParser
-  // where ForwardParser.Encoding == Self
-  
-  associatedtype ReverseParser : UnicodeParser
-  // where ReverseParser.Encoding == Self
-}
-
-public protocol UnicodeEncoding : _UnicodeEncoding
-where ForwardParser.Encoding == Self, ReverseParser.Encoding == Self {}
-
-extension UnicodeParser {
-  @inline(__always)
-  @discardableResult
-  public static func decode<I: IteratorProtocol>(
-    _ input: inout I,
-    repairingIllFormedSequences makeRepairs: Bool,
-    into output: (UnicodeScalar)->Void
-  ) -> Int
-  where I.Element == Encoding.CodeUnit
-  {
-    var errorCount = 0
-    var d = Self()
-    while true {
-      switch d.parseScalar(from: &input) {
-      case let .valid(scalarContent):
-        output(Encoding.decode(scalarContent))
-      case .invalid:
-        if !makeRepairs { return 1 }
-        errorCount += 1
-        output(UnicodeScalar(_unchecked: 0xFFFD))
-      case .emptyInput:
-        return errorCount
-      }
-    }
-  }
-}
-
-
-extension _Unicode {
-  struct ParsingIterator<
-    CodeUnitIterator : IteratorProtocol, 
-    Parser: UnicodeParser
-  > where Parser.Encoding.CodeUnit == CodeUnitIterator.Element {
-    var codeUnits: CodeUnitIterator
-    var parser: Parser
-  }
-}
-
-extension _Unicode.ParsingIterator : IteratorProtocol, Sequence {
-  mutating func next() -> Parser.Encoding.EncodedScalar? {
-    switch parser.parseScalar(from: &codeUnits) {
-    case let .valid(scalarContent): return scalarContent
-    case .invalid: return Parser.Encoding.encodedReplacementCharacter
-    case .emptyInput: return nil
-    }
-  }
-}
 
 extension _Unicode {
   struct DefaultScalarView<
@@ -268,7 +163,7 @@ extension _Unicode.DefaultScalarView : Collection {
 // https://github.com/apple/swift/pull/9074 and
 // https://bugs.swift.org/browse/SR-4721
 @_fixed_layout
-public struct ReverseIndexingIterator<
+public struct _ReverseIndexingIterator<
   Elements : BidirectionalCollection
 > : IteratorProtocol, Sequence {
 
@@ -300,7 +195,7 @@ extension _Unicode.DefaultScalarView : BidirectionalCollection {
   public func index(before i: Index) -> Index {
     var parser = Encoding.ReverseParser()
     
-    var more = ReverseIndexingIterator(
+    var more = _ReverseIndexingIterator(
       _elements: codeUnits, _position: i.codeUnitIndex)
     
     switch parser.parseScalar(from: &more) {
@@ -339,7 +234,9 @@ where Encoding : _UTFEncoding,
 }
 
 extension _UTFParser
-where Encoding.EncodedScalar == _UIntBuffer<UInt32, Encoding.CodeUnit> {
+where Encoding.EncodedScalar == _UIntBuffer<UInt32, Encoding.CodeUnit>,
+  Encoding.CodeUnit : FixedWidthInteger
+{
   public mutating func parseScalar<I : IteratorProtocol>(
     from input: inout I
   ) -> _Unicode.ParseResult<Encoding.EncodedScalar>

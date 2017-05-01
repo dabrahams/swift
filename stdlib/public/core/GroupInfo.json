@@ -23,6 +23,8 @@
     "StringUnicodeScalarView.swift",
     "Substring.swift",
     "Unicode.swift",
+    "UnicodeEncoding.swift",
+    "UnicodeParser.swift",
     "UnicodeScalar.swift",
     "UnicodeTrie.swift",
     "UnavailableStringAPIs.swift"

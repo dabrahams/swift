@@ -133,6 +133,8 @@ set(SWIFTLIB_ESSENTIAL
   UIntBuffer.swift
   UnavailableStringAPIs.swift.gyb
   Unicode.swift
+  UnicodeEncoding.swift
+  UnicodeParser.swift
   UnicodeScalar.swift
   UnicodeTrie.swift.gyb
   Unmanaged.swift
