@@ -27,7 +27,10 @@
     "UnicodeParser.swift",
     "UnicodeScalar.swift",
     "UnicodeTrie.swift",
-    "UnavailableStringAPIs.swift"
+    "UnavailableStringAPIs.swift",
+    "UTFEncoding.swift",
+    "UTF8.swift",
+    "UTF16.swift"
   ],
   "Bool": [
     "Bool.swift"

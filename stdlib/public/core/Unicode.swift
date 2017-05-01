@@ -1193,5 +1193,9 @@ extension UTF16 {
 }
 
 /// A namespace for Unicode utilities.
-public enum _Unicode {}
+public enum _Unicode {
+  public typealias UTF8 = Swift.UTF8
+  public typealias UTF16 = Swift.UTF16
+  public typealias UTF32 = Swift.UTF32
+}
 

@@ -143,6 +143,9 @@ set(SWIFTLIB_ESSENTIAL
   UnsafeRawBufferPointer.swift.gyb
   UnsafePointer.swift.gyb
   UnsafeRawPointer.swift.gyb
+  UTFEncoding.swift
+  UTF8.swift
+  UTF16.swift
   WriteBackMutableSlice.swift
   )
 
