@@ -9,14 +9,14 @@
 // See https://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
 //
 //===----------------------------------------------------------------------===//
-extension _Unicode.UTF8 : _UTFEncoding {
+extension _Unicode.UTF8 : _UnicodeEncoding {
   public typealias EncodedScalar = _UIntBuffer<UInt32, UInt8>
 
   public static var encodedReplacementCharacter : EncodedScalar {
     return EncodedScalar(_storage: 0xbdbfef, _bitCount: 24)
   }
 
-  internal static func _isScalar(_ x: CodeUnit) -> Bool {
+  public static func _isScalar(_ x: CodeUnit) -> Bool {
     return x & 0x80 == 0
   }
 
@@ -85,7 +85,7 @@ extension _Unicode.UTF8 : _UTFEncoding {
   }
 }
 
-extension UTF8.ReverseParser : _UTFParser {
+extension UTF8.ReverseParser : UnicodeParser, _UTFParser {
   public typealias Encoding = _Unicode.UTF8
 
   public func _parseMultipleCodeUnits() -> (isValid: Bool, bitCount: UInt8) {
@@ -158,7 +158,7 @@ extension UTF8.ReverseParser : _UTFParser {
   }
 }
 
-extension _Unicode.UTF8.ForwardParser : _UTFParser {
+extension _Unicode.UTF8.ForwardParser : UnicodeParser, _UTFParser {
   public typealias Encoding = _Unicode.UTF8
   
   public func _parseMultipleCodeUnits() -> (isValid: Bool, bitCount: UInt8) {
@@ -223,3 +223,5 @@ extension _Unicode.UTF8.ForwardParser : _UTFParser {
     return r
   }
 }
+
+extension _Unicode.UTF8 : UnicodeEncoding {  }

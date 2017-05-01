@@ -26,6 +26,19 @@ public protocol _UnicodeEncoding {
 
   /// Converts from encoding-independent to encoded representation
   static func encode(_ content: UnicodeScalar) -> EncodedScalar
+
+  //===--------------------------------------------------------------------===//
+  // FIXME: this requirement shouldn't be here and is mitigated by the default
+  // implementation below.  Compiler bugs prevent it from being expressed in an
+  // intermediate, underscored protocol.
+  /// Returns true if `x` only appears in this encoding as the representation of
+  /// a complete scalar value.
+  static func _isScalar(_ x: CodeUnit) -> Bool
+}
+
+extension _UnicodeEncoding {
+  // See note on declaration of requirement, above
+  public static func _isScalar(_ x: CodeUnit) -> Bool { return false }
 }
 
 public protocol _UnicodeEncoding_ {

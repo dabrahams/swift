@@ -15,25 +15,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-internal protocol _UTFEncoding : UnicodeEncoding {
-  /// Returns true if `x` only appears in this encoding as the representation of
-  /// a complete scalar value.
-  static func _isScalar(_ x: CodeUnit) -> Bool
-}
 
-public protocol _UTFParser : UnicodeParser
-where Encoding : _UTFEncoding,
-  Encoding.EncodedScalar == _UIntBuffer<_UInt32, Encoding.CodeUnit>,
-  _UInt32 == UInt32 {
-  associatedtype _UInt32 = UInt32
-  
+public protocol _UTFParser {
+  associatedtype Encoding : _UnicodeEncoding
+
   func _parseMultipleCodeUnits() -> (isValid: Bool, bitCount: UInt8)
-  var _buffer: Encoding.EncodedScalar { get set }
-  func _bufferedScalar(bitCount: UInt8) -> Encoding.EncodedScalar
+  func _bufferedScalar(bitCount: UInt8) -> _UIntBuffer<UInt32, Encoding.CodeUnit>
+  
+  var _buffer: _UIntBuffer<UInt32, Encoding.CodeUnit> { get set }
 }
 
 extension _UTFParser
 where Encoding.EncodedScalar == _UIntBuffer<UInt32, Encoding.CodeUnit> {
+  
   public mutating func parseScalar<I : IteratorProtocol>(
     from input: inout I
   ) -> _Unicode.ParseResult<Encoding.EncodedScalar>
@@ -59,7 +53,6 @@ where Encoding.EncodedScalar == _UIntBuffer<UInt32, Encoding.CodeUnit> {
     }
     // Buffering mode.
     // Fill buffer back to 4 bytes (or as many as are left in the iterator).
-    _sanityCheck(_buffer._bitCount < _UInt32.bitWidth)
     repeat {
       if let codeUnit = input.next() {
         _buffer.append(codeUnit)
@@ -67,7 +60,7 @@ where Encoding.EncodedScalar == _UIntBuffer<UInt32, Encoding.CodeUnit> {
         if _buffer.isEmpty { return .emptyInput }
         break // We still have some bytes left in our buffer.
       }
-    } while _buffer._bitCount < _UInt32.bitWidth
+    } while _buffer.count < _buffer.capacity
 
     // Find one unicode scalar.
     let (isValid, scalarBitCount) = _parseMultipleCodeUnits()
