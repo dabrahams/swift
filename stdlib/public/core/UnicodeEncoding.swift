@@ -27,6 +27,9 @@ public protocol _UnicodeEncoding {
   /// Converts from encoding-independent to encoded representation
   static func encode(_ content: UnicodeScalar) -> EncodedScalar
 
+  associatedtype ForwardParser : UnicodeParser
+  associatedtype ReverseParser : UnicodeParser
+  
   //===--------------------------------------------------------------------===//
   // FIXME: this requirement shouldn't be here and is mitigated by the default
   // implementation below.  Compiler bugs prevent it from being expressed in an
@@ -41,11 +44,6 @@ extension _UnicodeEncoding {
   public static func _isScalar(_ x: CodeUnit) -> Bool { return false }
 }
 
-public protocol _UnicodeEncoding_ {
-  associatedtype ForwardParser : UnicodeParser
-  associatedtype ReverseParser : UnicodeParser
-}
-
-public protocol UnicodeEncoding : _UnicodeEncoding_
+public protocol UnicodeEncoding : _UnicodeEncoding
 where ForwardParser.Encoding == Self, ReverseParser.Encoding == Self {}
 
