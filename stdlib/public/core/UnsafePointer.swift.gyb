@@ -1222,6 +1222,12 @@ extension UInt {
     }
   }
 }
+
+extension ${Self} {
+  static var _max : ${Self} {
+    return Self(bitPattern: 0 as UInt &- MemoryLayout<Pointee>.stride)
+  }
+}
 % end # for mutable
 
 // ${'Local Variables'}:
