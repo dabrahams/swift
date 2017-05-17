@@ -128,16 +128,16 @@ internal func _withCStringAndLength<
 where Source.Iterator.Element == SourceEncoding.CodeUnit {
   var targetLength = 0 // nul terminator
   var i = source.makeIterator()
-  SourceEncoding.ForwardParser._parse(&i) {
+  SourceEncoding.ForwardParser.parse(&i) {
     targetLength += numericCast(
-      targetEncoding._transcode($0, from: SourceEncoding.self).count)
+      targetEncoding.transcode($0, from: SourceEncoding.self).count)
   }
   var a: [TargetEncoding.CodeUnit] = []
   a.reserveCapacity(targetLength + 1)
   i = source.makeIterator()
-  SourceEncoding.ForwardParser._parse(&i) {
+  SourceEncoding.ForwardParser.parse(&i) {
     a.append(
-      contentsOf: targetEncoding._transcode($0, from: SourceEncoding.self))
+      contentsOf: targetEncoding.transcode($0, from: SourceEncoding.self))
   }
   a.append(0)
   return try body(a, targetLength)

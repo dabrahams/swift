@@ -13,7 +13,14 @@ extension _Unicode {
   public enum ParseResult<T> {
   case valid(T)
   case emptyInput
-  case error(length: Int)
+  case invalid(length: Int)
+
+    var isEmpty : Bool {
+      switch self {
+      case .emptyInput: return true
+      default: return false
+      }
+    }
   }
 }
 
@@ -32,10 +39,9 @@ public protocol UnicodeParser {
 }
 
 extension UnicodeParser {
-  @_versioned
   @inline(__always)
   @discardableResult
-  internal static func _parse<I: IteratorProtocol>(
+  public static func parse<I: IteratorProtocol>(
     _ input: inout I,
     repairingIllFormedSequences makeRepairs: Bool = true,
     into output: (Encoding.EncodedScalar)->Void
@@ -48,7 +54,7 @@ extension UnicodeParser {
       switch d.parseScalar(from: &input) {
       case let .valid(scalarContent):
         output(scalarContent)
-      case .error:
+      case .invalid:
         if _slowPath(!makeRepairs) { return 1 }
         errorCount += 1
         output(Encoding.encodedReplacementCharacter)
@@ -60,14 +66,14 @@ extension UnicodeParser {
 
   @inline(__always)
   @discardableResult
-  public static func _decode<I: IteratorProtocol>(
+  public static func decode<I: IteratorProtocol>(
     _ input: inout I,
     repairingIllFormedSequences makeRepairs: Bool,
     into output: (UnicodeScalar)->Void
   ) -> Int
   where I.Element == Encoding.CodeUnit
   {
-    return _parse(&input, repairingIllFormedSequences: makeRepairs) {
+    return parse(&input, repairingIllFormedSequences: makeRepairs) {
       output(Encoding.decode($0))
     }
   }
@@ -75,8 +81,7 @@ extension UnicodeParser {
 
 extension _Unicode {
   @_fixed_layout
-  public // @testable
-  struct _ParsingIterator<
+  public struct ParsingIterator<
     CodeUnitIterator : IteratorProtocol, 
     Parser: UnicodeParser
   > where Parser.Encoding.CodeUnit == CodeUnitIterator.Element {
@@ -91,13 +96,13 @@ extension _Unicode {
   }
 }
 
-extension _Unicode._ParsingIterator : IteratorProtocol, Sequence {
+extension _Unicode.ParsingIterator : IteratorProtocol, Sequence {
   @inline(__always)
   @_inlineable
   public mutating func next() -> Parser.Encoding.EncodedScalar? {
     switch parser.parseScalar(from: &codeUnits) {
     case let .valid(scalarContent): return scalarContent
-    case .error: return Parser.Encoding.encodedReplacementCharacter
+    case .invalid: return Parser.Encoding.encodedReplacementCharacter
     case .emptyInput: return nil
     }
   }
