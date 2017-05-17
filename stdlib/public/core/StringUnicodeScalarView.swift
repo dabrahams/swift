@@ -16,7 +16,7 @@ extension String {
   /// You can access a string's view of Unicode scalar values by using its
   /// `unicodeScalars` property. Unicode scalar values are the 21-bit codes
   /// that are the basic unit of Unicode. Each scalar value is represented by
-  /// a `Unicode.Scalar` instance and is equivalent to a UTF-32 code unit.
+  /// a `UnicodeScalar` instance and is equivalent to a UTF-32 code unit.
   ///
   ///     let flowers = "Flowers 💐"
   ///     for v in flowers.unicodeScalars {
@@ -179,7 +179,7 @@ extension String {
     ///
     /// - Parameter position: A valid index of the character view. `position`
     ///   must be less than the view's end index.
-    public subscript(position: Index) -> Unicode.Scalar {
+    public subscript(position: Index) -> UnicodeScalar {
       var scratch = _ScratchIterator(_core, _toCoreIndex(position))
       var decoder = UTF16()
       switch decoder.decode(&scratch) {
@@ -188,7 +188,7 @@ extension String {
       case .emptyInput:
         _sanityCheckFailure("cannot subscript using an endIndex")
       case .error:
-        return Unicode.Scalar(0xfffd)!
+        return UnicodeScalar(0xfffd)!
       }
     }
 
@@ -244,13 +244,13 @@ extension String {
       ///
       /// - Precondition: `next()` has not been applied to a copy of `self`
       ///   since the copy was made.
-      public mutating func next() -> Unicode.Scalar? {
+      public mutating func next() -> UnicodeScalar? {
         var result: UnicodeDecodingResult
         if _baseSet {
           if _ascii {
             switch self._asciiBase.next() {
             case let x?:
-              result = .scalarValue(Unicode.Scalar(x))
+              result = .scalarValue(UnicodeScalar(x))
             case nil:
               result = .emptyInput
             }
@@ -266,7 +266,7 @@ extension String {
         case .emptyInput:
           return nil
         case .error:
-          return Unicode.Scalar(0xfffd)
+          return UnicodeScalar(0xfffd)
         }
       }
       internal var _decoder: UTF16 = UTF16()
@@ -279,7 +279,7 @@ extension String {
 
     /// Returns an iterator over the Unicode scalars that make up this view.
     ///
-    /// - Returns: An iterator over this collection's `Unicode.Scalar` elements.
+    /// - Returns: An iterator over this collection's `UnicodeScalar` elements.
     public func makeIterator() -> Iterator {
       return Iterator(_core)
     }
@@ -379,7 +379,7 @@ extension String.UnicodeScalarView : RangeReplaceableCollection {
   /// Appends the given Unicode scalar to the view.
   ///
   /// - Parameter c: The character to append to the string.
-  public mutating func append(_ x: Unicode.Scalar) {
+  public mutating func append(_ x: UnicodeScalar) {
     _core.append(x)
   }
 
@@ -389,7 +389,7 @@ extension String.UnicodeScalarView : RangeReplaceableCollection {
   ///
   /// - Complexity: O(*n*), where *n* is the length of the resulting view.
   public mutating func append<S : Sequence>(contentsOf newElements: S)
-    where S.Element == Unicode.Scalar {
+    where S.Iterator.Element == UnicodeScalar {
     _core.append(contentsOf: newElements.lazy.flatMap { $0.utf16 })
   }
   
@@ -411,7 +411,7 @@ extension String.UnicodeScalarView : RangeReplaceableCollection {
   public mutating func replaceSubrange<C>(
     _ bounds: Range<Index>,
     with newElements: C
-  ) where C : Collection, C.Element == Unicode.Scalar {
+  ) where C : Collection, C.Iterator.Element == UnicodeScalar {
     let rawSubRange: Range<Int> = _toCoreIndex(bounds.lowerBound) ..<
       _toCoreIndex(bounds.upperBound)
     let lazyUTF16 = newElements.lazy.flatMap { $0.utf16 }
@@ -457,7 +457,7 @@ extension String.UnicodeScalarIndex {
       _precondition(
         utf16Index >= utf16.startIndex
         && utf16Index <= utf16.endIndex,
-        "Invalid String.UTF16Index for this Unicode.Scalar view")
+        "Invalid String.UTF16Index for this UnicodeScalar view")
 
       // Detect positions that have no corresponding index.  Note that
       // we have to check before and after, because an unpaired
@@ -492,7 +492,7 @@ extension String.UnicodeScalarIndex {
 
     _precondition(
       utf8Index._coreIndex >= 0 && utf8Index._coreIndex <= core.endIndex,
-      "Invalid String.UTF8Index for this Unicode.Scalar view")
+      "Invalid String.UTF8Index for this UnicodeScalar view")
 
     // Detect positions that have no corresponding index.
     if !utf8Index._isOnUnicodeScalarBoundary(in: core) {

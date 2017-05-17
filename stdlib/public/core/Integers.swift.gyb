@@ -2403,14 +2403,14 @@ extension UnsignedInteger {
   @_transparent
   internal func renderNonZeroDescription() -> String {
     let ascii0 = 48
-    var buf: [Unicode.Scalar] = []
+    var buf: [UnicodeScalar] = []
 
     var x = self
     repeat {
       let r = x % 10
       x /= 10
       buf.append(
-        Unicode.Scalar(
+        UnicodeScalar(
           ascii0 + Int(UInt(extendingOrTruncating: r)._value))!)
     }
     while x != (0 as Self)

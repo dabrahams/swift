@@ -364,7 +364,7 @@ extension String {
 ///
 /// A string's `unicodeScalars` property is a collection of Unicode scalar
 /// values, the 21-bit codes that are the basic unit of Unicode. Each scalar
-/// value is represented by a `Unicode.Scalar` instance and is equivalent to a
+/// value is represented by a `UnicodeScalar` instance and is equivalent to a
 /// UTF-32 code unit.
 ///
 ///     print(cafe.unicodeScalars.count)
@@ -738,7 +738,7 @@ extension String {
   /// - Complexity: Appending a Unicode scalar to a string averages to O(1)
   ///   over many additions.
   @available(*, unavailable, message: "Replaced by append(_: String)")
-  public mutating func append(_ x: Unicode.Scalar) {
+  public mutating func append(_ x: UnicodeScalar) {
     Builtin.unreachable()
   }
 

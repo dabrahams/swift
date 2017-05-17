@@ -76,7 +76,7 @@ extension UnicodeParser {
   public static func _decode<I: IteratorProtocol>(
     _ input: inout I,
     repairingIllFormedSequences makeRepairs: Bool,
-    into output: (Unicode.Scalar)->Void
+    into output: (UnicodeScalar)->Void
   ) -> Int
   where I.Element == Encoding.CodeUnit
   {

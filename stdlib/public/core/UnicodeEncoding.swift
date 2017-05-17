@@ -26,11 +26,11 @@ public protocol _UnicodeEncoding {
   static var encodedReplacementCharacter : EncodedScalar { get }
 
   /// Converts from encoded to encoding-independent representation
-  static func decode(_ content: EncodedScalar) -> Unicode.Scalar
+  static func decode(_ content: EncodedScalar) -> UnicodeScalar
 
   /// Converts from encoding-independent to encoded representation, returning
   /// `nil` if the scalar can't be represented in this encoding.
-  static func encode(_ content: Unicode.Scalar) -> EncodedScalar?
+  static func encode(_ content: UnicodeScalar) -> EncodedScalar?
 
   /// Converts a scalar from another encoding's representation, returning
   /// `nil` if the scalar can't be represented in this encoding.
@@ -78,7 +78,7 @@ extension _UnicodeEncoding {
   /// Converts from encoding-independent to encoded representation, returning
   /// `encodedReplacementCharacter` if the scalar can't be represented in this
   /// encoding.
-  internal static func _encode(_ content: Unicode.Scalar) -> EncodedScalar {
+  internal static func _encode(_ content: UnicodeScalar) -> EncodedScalar {
     return encode(content) ?? encodedReplacementCharacter
   }
 

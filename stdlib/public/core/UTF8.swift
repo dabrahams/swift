@@ -32,34 +32,34 @@ extension Unicode.UTF8 : UnicodeEncoding {
 
   @inline(__always)
   @_inlineable
-  public static func decode(_ source: EncodedScalar) -> Unicode.Scalar {
+  public static func decode(_ source: EncodedScalar) -> UnicodeScalar {
     let bits = source._storage
     switch source._bitCount {
     case 8:
-      return Unicode.Scalar(_unchecked: bits)
+      return UnicodeScalar(_unchecked: bits)
     case 16:
       var value = (bits & 0b0_______________________11_1111__0000_0000) &>> 8
       value    |= (bits & 0b0________________________________0001_1111) &<< 6
-      return Unicode.Scalar(_unchecked: value)
+      return UnicodeScalar(_unchecked: value)
     case 24:
       var value = (bits & 0b0____________11_1111__0000_0000__0000_0000) &>> 16
       value    |= (bits & 0b0_______________________11_1111__0000_0000) &>> 2
       value    |= (bits & 0b0________________________________0000_1111) &<< 12
-      return Unicode.Scalar(_unchecked: value)
+      return UnicodeScalar(_unchecked: value)
     default:
       _sanityCheck(source.count == 4)
       var value = (bits & 0b0_11_1111__0000_0000__0000_0000__0000_0000) &>> 24
       value    |= (bits & 0b0____________11_1111__0000_0000__0000_0000) &>> 10
       value    |= (bits & 0b0_______________________11_1111__0000_0000) &<< 4
       value    |= (bits & 0b0________________________________0000_0111) &<< 18
-      return Unicode.Scalar(_unchecked: value)
+      return UnicodeScalar(_unchecked: value)
     }
   }
   
   @inline(__always)
   @_inlineable
   public static func encode(
-    _ source: Unicode.Scalar
+    _ source: UnicodeScalar
   ) -> EncodedScalar? {
     var c = source.value
     if _fastPath(c < (1&<<7)) {

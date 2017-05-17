@@ -67,7 +67,7 @@ public typealias CDouble = Double
 // FIXME: Is it actually UTF-32 on Darwin?
 //
 /// The C++ 'wchar_t' type.
-public typealias CWideChar = Unicode.Scalar
+public typealias CWideChar = UnicodeScalar
 
 // FIXME: Swift should probably have a UTF-16 type other than UInt16.
 //
@@ -75,7 +75,7 @@ public typealias CWideChar = Unicode.Scalar
 public typealias CChar16 = UInt16
 
 /// The C++11 'char32_t' type, which has UTF-32 encoding.
-public typealias CChar32 = Unicode.Scalar
+public typealias CChar32 = UnicodeScalar
 
 /// The C '_Bool' and C++ 'bool' type.
 public typealias CBool = Bool

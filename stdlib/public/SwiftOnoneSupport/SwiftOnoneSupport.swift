@@ -147,7 +147,7 @@ struct _Prespecialize {
     // Force pre-specialization of arrays with elements of different
     // character and unicode scalar types.
     _createArrayUser("a" as Character)
-    _createArrayUser("a" as Unicode.Scalar)
+    _createArrayUser("a" as UnicodeScalar)
     _createArrayUserWithoutSorting("a".utf8)
     _createArrayUserWithoutSorting("a".utf16)
     _createArrayUserWithoutSorting("a".unicodeScalars)

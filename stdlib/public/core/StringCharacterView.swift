@@ -492,13 +492,13 @@ extension String.CharacterView : BidirectionalCollection {
         // pass.
         if relativeOffset >= asciiBuffer.startIndex &&
           relativeOffset < asciiBuffer.endIndex {
-          return Character(Unicode.Scalar(asciiBuffer[relativeOffset]))
+          return Character(UnicodeScalar(asciiBuffer[relativeOffset]))
         }
       } else if _core._baseAddress != nil {
         let cu = _core._nthContiguous(relativeOffset)
         // Only constructible if sub-surrogate
         if (cu < 0xd800) {
-          return Character(Unicode.Scalar(cu)._unsafelyUnwrappedUnchecked)
+          return Character(UnicodeScalar(cu)._unsafelyUnwrappedUnchecked)
         }
       }
     }

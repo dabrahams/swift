@@ -13,7 +13,7 @@
 import StdlibUnittest
 
 struct CollationTableEntry {
-  let scalars: [Unicode.Scalar]
+  let scalars: [UnicodeScalar]
   let collationElements: [UInt64]
   let comment: String
 
@@ -22,7 +22,7 @@ struct CollationTableEntry {
     _ collationElements: [UInt64],
     _ comment: String
   ) {
-    self.scalars = scalars.map { Unicode.Scalar($0)! }
+    self.scalars = scalars.map { UnicodeScalar($0)! }
     self.collationElements = collationElements
     self.comment = comment
   }
@@ -212,9 +212,9 @@ extension HashableArray : ExpressibleByArrayLiteral {
   }
 }
 
-let ducetExtract: [HashableArray<Unicode.Scalar> : CollationTableEntry] = {
+let ducetExtract: [HashableArray<UnicodeScalar> : CollationTableEntry] = {
   () in
-  var result: [HashableArray<Unicode.Scalar> : CollationTableEntry] = [:]
+  var result: [HashableArray<UnicodeScalar> : CollationTableEntry] = [:]
   for entry in ducetExtractData {
     result[HashableArray(entry.scalars)] = entry
   }
@@ -232,7 +232,7 @@ extension String {
   internal var _collationElements: [UInt64] {
     var result: [UInt64] = []
     for us in self.unicodeScalars {
-      let scalars: HashableArray<Unicode.Scalar> = [us]
+      let scalars: HashableArray<UnicodeScalar> = [us]
       let collationElements = ducetExtract[scalars]!.collationElements
       if collationElements[0] != 0 {
         result += collationElements
