@@ -9,12 +9,12 @@
 // See https://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
 //
 //===----------------------------------------------------------------------===//
-extension Unicode {
+extension _Unicode {
   @_fixed_layout
   public enum ASCII {}
 }
 
-extension Unicode.ASCII : UnicodeEncoding {
+extension _Unicode.ASCII : UnicodeEncoding {
   public typealias CodeUnit = UInt8
   public typealias EncodedScalar = CollectionOfOne<CodeUnit>
 
@@ -69,19 +69,19 @@ extension Unicode.ASCII : UnicodeEncoding {
   public typealias ReverseParser = Parser
 }
 
-extension Unicode.ASCII.Parser : UnicodeParser {
-  public typealias Encoding = Unicode.ASCII
+extension _Unicode.ASCII.Parser : UnicodeParser {
+  public typealias Encoding = _Unicode.ASCII
 
   /// Parses a single Unicode scalar value from `input`.
   public mutating func parseScalar<I : IteratorProtocol>(
     from input: inout I
-  ) -> Unicode.ParseResult<Encoding.EncodedScalar>
+  ) -> _Unicode.ParseResult<Encoding.EncodedScalar>
   where I.Element == Encoding.CodeUnit {
     let n = input.next()
     if _fastPath(n != nil), let x = n {
       guard _fastPath(Int8(extendingOrTruncating: x) >= 0)
       else { return .error(length: 1) }
-      return .valid(Unicode.ASCII.EncodedScalar(x))
+      return .valid(_Unicode.ASCII.EncodedScalar(x))
     }
     return .emptyInput
   }
