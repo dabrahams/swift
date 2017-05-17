@@ -190,8 +190,7 @@ func checkStringProtocol<S : StringProtocol, Encoding: UnicodeEncoding>(
   expectingUTF32 expected: [UInt32]
 ) {
   expectEqualSequence(
-    expected, utf32(S(decoding: utfStr, as: Encoding.self)),
-    "\(S.self) init(decoding:as:)")
+    expected, utf32(s), "\(S.self) init(codeUnits:encoding:)")
 
   if !utfStr.contains(0) {
     if Encoding.self == UTF8.self {
@@ -203,7 +202,7 @@ func checkStringProtocol<S : StringProtocol, Encoding: UnicodeEncoding>(
     
     var ntbs = Array(utfStr); ntbs.append(0)
     expectEqualSequence(
-      expected, utf32(S(decodingCString: ntbs, as: Encoding.self)),
+      expected, utf32(S(cString: ntbs, encoding: Encoding.self)),
       "\(S.self) init(cString:encoding:)"
     )
 
@@ -211,8 +210,8 @@ func checkStringProtocol<S : StringProtocol, Encoding: UnicodeEncoding>(
       expectEqual(s, S(cString: $0), "\(S.self) withCString(_:)")
     }
     
-    s.withCString(encodedAs: Encoding.self) {
-      expectEqual(s, S(decodingCString: $0, as: Encoding.self),
+    s.withCString(encoding: Encoding.self) {
+      expectEqual(s, S(cString: $0, encoding: Encoding.self),
         "\(S.self) withCString(encoding:_:)")
     }
   }
@@ -314,15 +313,13 @@ func checkDecodeUTF<Codec : UnicodeCodec & UnicodeEncoding>(
   
   //===--- String/Substring Construction and C-String interop -------------===//
   do {
-    let s = String(decoding: utfStr, as: Codec.self)
+    let s = String(codeUnits: utfStr, encoding: Codec.self)
     checkStringProtocol(
       s, utfStr, encodedAs: Codec.self, expectingUTF32: expected)
   }
   
   do {
-    let s0 = "\n" + String(decoding: utfStr, as: Codec.self) + "\n"
-    let s = s0.dropFirst().dropLast()
-    expectEqualSequence(expected, utf32(s), "Sliced Substring")
+    let s0 = "\n" + String(codeUnits: utfStr, encoding: Codec.self) + "\n"
     checkStringProtocol(
       s0.dropFirst().dropLast(),
       utfStr, encodedAs: Codec.self, expectingUTF32: expected)

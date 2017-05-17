@@ -47,7 +47,7 @@ public protocol StringProtocol
   /// - Parameter encoding: describes the encoding in which the code units
   ///   should be interpreted.
   init<C: Collection, Encoding: UnicodeEncoding>(
-    decoding codeUnits: C, as encoding: Encoding.Type
+    codeUnits: C, encoding: Encoding.Type
   )
     where C.Iterator.Element == Encoding.CodeUnit
 
@@ -66,8 +66,8 @@ public protocol StringProtocol
   /// - Parameter encoding: describes the encoding in which the code units
   ///   should be interpreted.
   init<Encoding: UnicodeEncoding>(
-    decodingCString nulTerminatedCodeUnits: UnsafePointer<Encoding.CodeUnit>,
-    as: Encoding.Type)
+    cString nulTerminatedCodeUnits: UnsafePointer<Encoding.CodeUnit>,
+    encoding: Encoding.Type)
     
   /// Invokes the given closure on the contents of the string, represented as a
   /// pointer to a null-terminated sequence of UTF-8 code units.
@@ -77,7 +77,7 @@ public protocol StringProtocol
   /// Invokes the given closure on the contents of the string, represented as a
   /// pointer to a null-terminated sequence of code units in the given encoding.
   func withCString<Result, Encoding: UnicodeEncoding>(
-    encodedAs: Encoding.Type,
+    encoding: Encoding.Type,
     _ body: (UnsafePointer<Encoding.CodeUnit>) throws -> Result
   ) rethrows -> Result
 }
@@ -193,10 +193,10 @@ extension _StringCore {
 
 extension String {
   public init<C: Collection, Encoding: UnicodeEncoding>(
-    decoding codeUnits: C, as sourceEncoding: Encoding.Type
+    codeUnits: C, encoding: Encoding.Type
   ) where C.Iterator.Element == Encoding.CodeUnit {
     let (b,_) = _StringBuffer.fromCodeUnits(
-      codeUnits, encoding: sourceEncoding, repairIllFormedSequences: true)
+      codeUnits, encoding: encoding, repairIllFormedSequences: true)
     self = String(_StringCore(b!))
   }
   
@@ -208,20 +208,20 @@ extension String {
   /// - Parameter encoding: describes the encoding in which the code units
   ///   should be interpreted.
   public init<Encoding: UnicodeEncoding>(
-    decodingCString nulTerminatedCodeUnits: UnsafePointer<Encoding.CodeUnit>,
-    as sourceEncoding: Encoding.Type) {
+    cString nulTerminatedCodeUnits: UnsafePointer<Encoding.CodeUnit>,
+    encoding: Encoding.Type) {
 
     let codeUnits = _SentinelCollection(
       UnsafeBufferPointer(_unboundedStartingAt: nullTerminatedCodeUnits),
       until: _IsZero()
     )
-    self.init(decoding: codeUnits, as: sourceEncoding)
+    self.init(codeUnits: codeUnits, encoding: encoding)
   }
 
   /// Invokes the given closure on the contents of the string, represented as a
   /// pointer to a null-terminated sequence of code units in the given encoding.
   public func withCString<Result, TargetEncoding: UnicodeEncoding>(
-    encodedAs targetEncoding: TargetEncoding.Type,
+    encoding targetEncoding: TargetEncoding.Type,
     _ body: (UnsafePointer<TargetEncoding.CodeUnit>) throws -> Result
   ) rethrows -> Result {
     return try _core._withCSubstring(
