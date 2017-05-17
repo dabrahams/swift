@@ -7,7 +7,6 @@
     "ASCII.swift",
     "CString.swift",
     "Character.swift",
-    "CharacterUnicodeScalars.swift",
     "StaticString.swift",
     "String.swift",
     "StringBridge.swift",
