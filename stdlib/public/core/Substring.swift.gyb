@@ -168,15 +168,7 @@ public struct Substring : StringProtocol {
 
 % end
 
-  /// Creates a string from the given Unicode code units in the specified
-  /// encoding.
-  ///
-  /// - Parameters:
-  ///   - codeUnits: A collection of code units encoded in the ecoding
-  ///     specified in `sourceEncoding`.
-  ///   - sourceEncoding: The encoding in which `codeUnits` should be
-  ///     interpreted.
-  public init<C: Collection, Encoding: _UnicodeEncoding>(
+  public init<C: Collection, Encoding: UnicodeEncoding>(
     decoding codeUnits: C, as sourceEncoding: Encoding.Type
   ) where C.Iterator.Element == Encoding.CodeUnit {
     self.init(String(decoding: codeUnits, as: sourceEncoding))
@@ -194,15 +186,13 @@ public struct Substring : StringProtocol {
   /// Creates a string from the null-terminated sequence of bytes at the given
   /// pointer.
   ///
-  /// - Parameters:
-  ///   - nullTerminatedCodeUnits: A pointer to a sequence of contiguous code
-  ///     units in the encoding specified in `sourceEncoding`, ending just
-  ///     before the first zero code unit.
-  ///   - sourceEncoding: The encoding in which the code units should be
-  ///     interpreted.
-  public init<Encoding: _UnicodeEncoding>(
-    decodingCString nullTerminatedCodeUnits: UnsafePointer<Encoding.CodeUnit>,
-    as sourceEncoding: Encoding.Type
+  /// - Parameter nulTerminatedCodeUnits: a sequence of contiguous code units in
+  ///   the given `encoding`, ending just before the first zero code unit.
+  /// - Parameter encoding: describes the encoding in which the code units
+  ///   should be interpreted.
+  public init<Encoding: UnicodeEncoding>(
+    decodingCString nulTerminatedCodeUnits: UnsafePointer<Encoding.CodeUnit>,
+    as targetEncoding: Encoding.Type
   ) {
     self.init(
       String(decodingCString: nullTerminatedCodeUnits, as: sourceEncoding))
@@ -232,22 +222,9 @@ public struct Substring : StringProtocol {
     }
   }
 
-  /// Calls the given closure with a pointer to the contents of the string,
-  /// represented as a null-terminated sequence of code units.
-  ///
-  /// The pointer passed as an argument to `body` is valid only during the
-  /// execution of `withCString(encodedAs:_:)`. Do not store or return the
-  /// pointer for later use.
-  ///
-  /// - Parameters:
-  ///   - body: A closure with a pointer parameter that points to a
-  ///     null-terminated sequence of code units. If `body` has a return
-  ///     value, it is used as the return value for the
-  ///     `withCString(encodedAs:_:)` method. The pointer argument is valid
-  ///     only for the duration of the method's execution.
-  ///   - targetEncoding: The encoding in which the code units should be interpreted.
-  /// - Returns: The return value of the `body` closure parameter, if any.
-  public func withCString<Result, TargetEncoding: _UnicodeEncoding>(
+  /// Invokes the given closure on the contents of the string, represented as a
+  /// pointer to a null-terminated sequence of code units in the given encoding.
+  public func withCString<Result, TargetEncoding: UnicodeEncoding>(
     encodedAs targetEncoding: TargetEncoding.Type,
     _ body: (UnsafePointer<TargetEncoding.CodeUnit>) throws -> Result
   ) rethrows -> Result {

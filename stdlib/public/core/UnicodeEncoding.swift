@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-public protocol _UnicodeEncoding_ {
+public protocol _UnicodeEncoding {
   /// The basic unit of encoding
   associatedtype CodeUnit : UnsignedInteger, FixedWidthInteger
   
@@ -37,18 +37,18 @@ public protocol _UnicodeEncoding_ {
   ///
   /// A default implementation of this method will be provided 
   /// automatically for any conforming type that does not implement one.
-  static func transcode<FromEncoding : Unicode.Encoding>(
+  static func transcode<FromEncoding : UnicodeEncoding>(
     _ content: FromEncoding.EncodedScalar, from _: FromEncoding.Type
   ) -> EncodedScalar?
 
   /// A type that can be used to parse `CodeUnits` into
   /// `EncodedScalar`s.
-  associatedtype ForwardParser : Unicode.Parser
+  associatedtype ForwardParser : UnicodeParser
   // where ForwardParser.Encoding == Self
   
   /// A type that can be used to parse a reversed sequence of
   /// `CodeUnits` into `EncodedScalar`s.
-  associatedtype ReverseParser : Unicode.Parser
+  associatedtype ReverseParser : UnicodeParser
   // where ReverseParser.Encoding == Self
 
   //===--------------------------------------------------------------------===//
@@ -60,16 +60,16 @@ public protocol _UnicodeEncoding_ {
   static func _isScalar(_ x: CodeUnit) -> Bool
 }
 
-extension _UnicodeEncoding_ {
+extension _UnicodeEncoding {
   // See note on declaration of requirement, above
   public static func _isScalar(_ x: CodeUnit) -> Bool { return false }
 }
 
-public protocol _UnicodeEncoding : _UnicodeEncoding_
+public protocol UnicodeEncoding : _UnicodeEncoding
 where ForwardParser.Encoding == Self, ReverseParser.Encoding == Self {}
 
-extension _UnicodeEncoding_ {
-  public static func transcode<FromEncoding : Unicode.Encoding>(
+extension _UnicodeEncoding {
+  public static func transcode<FromEncoding : UnicodeEncoding>(
     _ content: FromEncoding.EncodedScalar, from _: FromEncoding.Type
   ) -> EncodedScalar? {
     return encode(FromEncoding.decode(content))
@@ -85,14 +85,9 @@ extension _UnicodeEncoding_ {
   /// Converts a scalar from another encoding's representation, returning
   /// `encodedReplacementCharacter` if the scalar can't be represented in this
   /// encoding.
-  internal static func _transcode<FromEncoding : Unicode.Encoding>(
+  internal static func _transcode<FromEncoding : UnicodeEncoding>(
     _ content: FromEncoding.EncodedScalar, from _: FromEncoding.Type
   ) -> EncodedScalar {
     return _encode(FromEncoding.decode(content))
   }
 }
-
-extension Unicode {
-  public typealias Encoding = _UnicodeEncoding
-}
-

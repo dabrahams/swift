@@ -42,13 +42,12 @@ public protocol StringProtocol
   /// Creates a string from the given Unicode code units in the specified
   /// encoding.
   ///
-  /// - Parameters:
-  ///   - codeUnits: A collection of code units encoded in the ecoding
-  ///     specified in `sourceEncoding`.
-  ///   - sourceEncoding: The encoding in which `codeUnits` should be
-  ///     interpreted.
-  init<C: Collection, Encoding: Unicode.Encoding>(
-    decoding codeUnits: C, as sourceEncoding: Encoding.Type
+  /// - Parameter codeUnits: a collection of code units in
+  ///   the given `encoding`.
+  /// - Parameter encoding: describes the encoding in which the code units
+  ///   should be interpreted.
+  init<C: Collection, Encoding: UnicodeEncoding>(
+    decoding codeUnits: C, as encoding: Encoding.Type
   )
     where C.Iterator.Element == Encoding.CodeUnit
 
@@ -62,50 +61,23 @@ public protocol StringProtocol
   /// Creates a string from the null-terminated sequence of bytes at the given
   /// pointer.
   ///
-  /// - Parameters:
-  ///   - nullTerminatedCodeUnits: A pointer to a sequence of contiguous code
-  ///     units in the encoding specified in `sourceEncoding`, ending just
-  ///     before the first zero code unit.
-  ///   - sourceEncoding: The encoding in which the code units should be
-  ///     interpreted.
-  init<Encoding: Unicode.Encoding>(
-    decodingCString nullTerminatedCodeUnits: UnsafePointer<Encoding.CodeUnit>,
-    as sourceEncoding: Encoding.Type)
-  
-  /// Calls the given closure with a pointer to the contents of the string,
-  /// represented as a null-terminated sequence of UTF-8 code units.
-  ///
-  /// The pointer passed as an argument to `body` is valid only during the
-  /// execution of `withCString(_:)`. Do not store or return the pointer for
-  /// later use.
-  ///
-  /// - Parameter body: A closure with a pointer parameter that points to a
-  ///   null-terminated sequence of UTF-8 code units. If `body` has a return
-  ///   value, it is used as the return value for the `withCString(_:)`
-  ///   method. The pointer argument is valid only for the duration of the
-  ///   method's execution.
-  /// - Returns: The return value of the `body` closure parameter, if any.
+  /// - Parameter nulTerminatedCodeUnits: a sequence of contiguous code units in
+  ///   the given `encoding`, ending just before the first zero code unit.
+  /// - Parameter encoding: describes the encoding in which the code units
+  ///   should be interpreted.
+  init<Encoding: UnicodeEncoding>(
+    decodingCString nulTerminatedCodeUnits: UnsafePointer<Encoding.CodeUnit>,
+    as: Encoding.Type)
+    
+  /// Invokes the given closure on the contents of the string, represented as a
+  /// pointer to a null-terminated sequence of UTF-8 code units.
   func withCString<Result>(
     _ body: (UnsafePointer<CChar>) throws -> Result) rethrows -> Result
 
-  /// Calls the given closure with a pointer to the contents of the string,
-  /// represented as a null-terminated sequence of code units.
-  ///
-  /// The pointer passed as an argument to `body` is valid only during the
-  /// execution of `withCString(encodedAs:_:)`. Do not store or return the
-  /// pointer for later use.
-  ///
-  /// - Parameters:
-  ///   - body: A closure with a pointer parameter that points to a
-  ///     null-terminated sequence of code units. If `body` has a return
-  ///     value, it is used as the return value for the
-  ///     `withCString(encodedAs:_:)` method. The pointer argument is valid
-  ///     only for the duration of the method's execution.
-  ///   - targetEncoding: The encoding in which the code units should be
-  ///     interpreted.
-  /// - Returns: The return value of the `body` closure parameter, if any.
-  func withCString<Result, Encoding: Unicode.Encoding>(
-    encodedAs targetEncoding: Encoding.Type,
+  /// Invokes the given closure on the contents of the string, represented as a
+  /// pointer to a null-terminated sequence of code units in the given encoding.
+  func withCString<Result, Encoding: UnicodeEncoding>(
+    encodedAs: Encoding.Type,
     _ body: (UnsafePointer<Encoding.CodeUnit>) throws -> Result
   ) rethrows -> Result
 }
@@ -126,8 +98,8 @@ extension StringProtocol /* : LosslessStringConvertible */ {
 /// `source` is interpreted as being encoded with `SourceEncoding`.
 internal func _withCString<
   Source : Collection,
-  SourceEncoding : Unicode.Encoding, 
-  TargetEncoding : Unicode.Encoding, 
+  SourceEncoding : UnicodeEncoding, 
+  TargetEncoding : UnicodeEncoding, 
   Result
 >(
   encodedAs targetEncoding: TargetEncoding.Type,
@@ -144,8 +116,8 @@ where Source.Iterator.Element == SourceEncoding.CodeUnit {
 
 internal func _withCStringAndLength<
   Source : Collection,
-  SourceEncoding : Unicode.Encoding, 
-  TargetEncoding : Unicode.Encoding, 
+  SourceEncoding : UnicodeEncoding, 
+  TargetEncoding : UnicodeEncoding, 
   Result
 >(
   encodedAs targetEncoding: TargetEncoding.Type,
@@ -174,7 +146,7 @@ where Source.Iterator.Element == SourceEncoding.CodeUnit {
 extension _StringCore {
   /// Invokes `body` on a null-terminated sequence of code units in the given
   /// encoding corresponding to the substring in `bounds`.
-  internal func _withCSubstring<Result, TargetEncoding: Unicode.Encoding>(
+  internal func _withCSubstring<Result, TargetEncoding: UnicodeEncoding>(
     in bounds: Range<Index>,
     encoding targetEncoding: TargetEncoding.Type,
     _ body: (UnsafePointer<TargetEncoding.CodeUnit>) throws -> Result
@@ -185,7 +157,7 @@ extension _StringCore {
   }
 
   internal func _withCSubstringAndLength<
-    Result, TargetEncoding: Unicode.Encoding
+    Result, TargetEncoding: UnicodeEncoding
   >(
     in bounds: Range<Index>,
     encoding targetEncoding: TargetEncoding.Type,
@@ -220,15 +192,7 @@ extension _StringCore {
 }
 
 extension String {
-  /// Creates a string from the given Unicode code units in the specified
-  /// encoding.
-  ///
-  /// - Parameters:
-  ///   - codeUnits: A collection of code units encoded in the ecoding
-  ///     specified in `sourceEncoding`.
-  ///   - sourceEncoding: The encoding in which `codeUnits` should be
-  ///     interpreted.
-  public init<C: Collection, Encoding: Unicode.Encoding>(
+  public init<C: Collection, Encoding: UnicodeEncoding>(
     decoding codeUnits: C, as sourceEncoding: Encoding.Type
   ) where C.Iterator.Element == Encoding.CodeUnit {
     let (b,_) = _StringBuffer.fromCodeUnits(
@@ -239,14 +203,12 @@ extension String {
   /// Creates a string from the null-terminated sequence of bytes at the given
   /// pointer.
   ///
-  /// - Parameters:
-  ///   - nullTerminatedCodeUnits: A pointer to a sequence of contiguous code
-  ///     units in the encoding specified in `sourceEncoding`, ending just
-  ///     before the first zero code unit.
-  ///   - sourceEncoding: The encoding in which the code units should be
-  ///     interpreted.
-  public init<Encoding: Unicode.Encoding>(
-    decodingCString nullTerminatedCodeUnits: UnsafePointer<Encoding.CodeUnit>,
+  /// - Parameter nulTerminatedCodeUnits: a sequence of contiguous code units in
+  ///   the given `encoding`, ending just before the first zero code unit.
+  /// - Parameter encoding: describes the encoding in which the code units
+  ///   should be interpreted.
+  public init<Encoding: UnicodeEncoding>(
+    decodingCString nulTerminatedCodeUnits: UnsafePointer<Encoding.CodeUnit>,
     as sourceEncoding: Encoding.Type) {
 
     let codeUnits = _SentinelCollection(
@@ -255,24 +217,10 @@ extension String {
     )
     self.init(decoding: codeUnits, as: sourceEncoding)
   }
-  
-  /// Calls the given closure with a pointer to the contents of the string,
-  /// represented as a null-terminated sequence of code units.
-  ///
-  /// The pointer passed as an argument to `body` is valid only during the
-  /// execution of `withCString(encodedAs:_:)`. Do not store or return the
-  /// pointer for later use.
-  ///
-  /// - Parameters:
-  ///   - body: A closure with a pointer parameter that points to a
-  ///     null-terminated sequence of code units. If `body` has a return
-  ///     value, it is used as the return value for the
-  ///     `withCString(encodedAs:_:)` method. The pointer argument is valid
-  ///     only for the duration of the method's execution.
-  ///   - targetEncoding: The encoding in which the code units should be
-  ///     interpreted.
-  /// - Returns: The return value of the `body` closure parameter, if any.
-  public func withCString<Result, TargetEncoding: Unicode.Encoding>(
+
+  /// Invokes the given closure on the contents of the string, represented as a
+  /// pointer to a null-terminated sequence of code units in the given encoding.
+  public func withCString<Result, TargetEncoding: UnicodeEncoding>(
     encodedAs targetEncoding: TargetEncoding.Type,
     _ body: (UnsafePointer<TargetEncoding.CodeUnit>) throws -> Result
   ) rethrows -> Result {
@@ -603,7 +551,7 @@ public struct String {
 extension String {
   public // @testable
   static func _fromWellFormedCodeUnitSequence<
-    Encoding : Unicode.Encoding, Input : Collection
+    Encoding : UnicodeEncoding, Input : Collection
   >(
     _ encoding: Encoding.Type, input: Input
   ) -> String
@@ -613,7 +561,7 @@ extension String {
 
   public // @testable
   static func _fromCodeUnitSequence<
-    Encoding : Unicode.Encoding, Input : Collection
+    Encoding : UnicodeEncoding, Input : Collection
   >(
     _ encoding: Encoding.Type, input: Input
   ) -> String?
@@ -626,7 +574,7 @@ extension String {
 
   public // @testable
   static func _fromCodeUnitSequenceWithRepair<
-    Encoding : Unicode.Encoding, Input : Collection
+    Encoding : UnicodeEncoding, Input : Collection
   >(
     _ encoding: Encoding.Type, input: Input
   ) -> (String, hadError: Bool)
@@ -739,7 +687,7 @@ extension String {
   /// Returns the number of code units occupied by this string
   /// in the given encoding.
   func _encodedLength<
-    Encoding: Unicode.Encoding
+    Encoding: UnicodeEncoding
   >(_ encoding: Encoding.Type) -> Int {
     var codeUnitCount = 0
     self._encode(encoding, into: { _ in codeUnitCount += 1 })
@@ -753,7 +701,7 @@ extension String {
   // way -- add a test for that.
   // Related: <rdar://problem/17340917> Please document how NSString interacts
   // with unpaired surrogates
-  func _encode<Encoding: Unicode.Encoding>(
+  func _encode<Encoding: UnicodeEncoding>(
     _ encoding: Encoding.Type,
     into processCodeUnit: (Encoding.CodeUnit) -> Void
   ) {

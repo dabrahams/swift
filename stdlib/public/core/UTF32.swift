@@ -15,7 +15,7 @@ extension Unicode {
   }
 }
 
-extension Unicode.UTF32 : Unicode.Encoding {
+extension Unicode.UTF32 : UnicodeEncoding {
   public typealias CodeUnit = UInt32
   public typealias EncodedScalar = CollectionOfOne<UInt32>
 
@@ -48,7 +48,7 @@ extension Unicode.UTF32 : Unicode.Encoding {
   public typealias ReverseParser = Parser
 }
 
-extension UTF32.Parser : Unicode.Parser {
+extension UTF32.Parser : UnicodeParser {
   public typealias Encoding = Unicode.UTF32
 
   /// Parses a single Unicode scalar value from `input`.
