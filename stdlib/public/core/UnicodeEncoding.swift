@@ -62,15 +62,13 @@ extension _UnicodeEncoding {
   }
 
   /// Converts from encoding-independent to encoded representation, returning
-  /// `encodedReplacementCharacter` if the scalar can't be represented in this
-  /// encoding.
+  /// `nil` if the scalar can't be represented in this encoding.
   public static func encode(_ content: UnicodeScalar) -> EncodedScalar {
     return encodeIfRepresentable(content) ?? encodedReplacementCharacter
   }
 
   /// Converts a scalar from another encoding's representation, returning
-  /// `encodedReplacementCharacter` if the scalar can't be represented in this
-  /// encoding.
+  /// `nil` if the scalar can't be represented in this encoding.
   public static func transcode<FromEncoding : UnicodeEncoding>(
     _ content: FromEncoding.EncodedScalar, from _: FromEncoding.Type
   ) -> EncodedScalar {
