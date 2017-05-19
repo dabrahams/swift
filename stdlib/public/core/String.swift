@@ -12,6 +12,26 @@
 
 import SwiftShims
 
+
+public protocol _StringView {
+  associatedtype UTF8View 
+    : /* Bidirectional */Collection where UTF8View.Element == UInt8
+  var utf8: UTF8View { get }
+
+  associatedtype UTF16View
+    : BidirectionalCollection where UTF16View.Element == UInt16
+  var utf16: UTF16View { get }
+
+  associatedtype UnicodeScalarView
+    : BidirectionalCollection where UnicodeScalarView.Element == Unicode.Scalar
+  var unicodeScalars: UnicodeScalarView { get }
+
+  associatedtype CharacterView
+    : BidirectionalCollection where CharacterView.Element == Character
+  var characters: CharacterView { get }
+  
+}
+
 /// A type that can represent a string as a collection of characters.
 public protocol StringProtocol
   : RangeReplaceableCollection, BidirectionalCollection,
@@ -22,14 +42,21 @@ public protocol StringProtocol
   Hashable
   where Iterator.Element == Character {
 
-  associatedtype UTF8Index
-  var utf8: String.UTF8View { get }
-  associatedtype UTF16Index
-  var utf16: String.UTF16View { get }
-  associatedtype UnicodeScalarIndex
-  var unicodeScalars: String.UnicodeScalarView { get }
-  /*associatedtype CharacterIndex*/
-  var characters: String.CharacterView { get }
+  associatedtype UTF8View 
+    : /* Bidirectional */Collection where UTF8View.Element == UInt8
+  var utf8: UTF8View { get }
+
+  associatedtype UTF16View
+    : BidirectionalCollection where UTF16View.Element == UInt16
+  var utf16: UTF16View { get }
+
+  associatedtype UnicodeScalarView
+    : BidirectionalCollection where UnicodeScalarView.Element == Unicode.Scalar
+  var unicodeScalars: UnicodeScalarView { get }
+
+  associatedtype CharacterView
+    : BidirectionalCollection where CharacterView.Element == Character
+  var characters: CharacterView { get }
 
 #if _runtime(_ObjC)
   func hasPrefix(_ prefix: String) -> Bool
