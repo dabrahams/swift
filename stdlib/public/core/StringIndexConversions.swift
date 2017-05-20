@@ -46,12 +46,9 @@ extension String.Index {
   ///     resulting index.
   public init?(
     _ unicodeScalarIndex: String.UnicodeScalarIndex,
-    within other: String
+    within _: String
   ) {
-    if !other.unicodeScalars._isOnGraphemeClusterBoundary(unicodeScalarIndex) {
-      return nil
-    }
-    self.init(_base: unicodeScalarIndex, in: other.characters)
+    return unicodeScalarIndex
   }
 
   /// Creates an index in the given string that corresponds exactly to the
