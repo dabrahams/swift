@@ -436,36 +436,6 @@ extension String.UnicodeScalarIndex {
     self = utf16Index
   }
 
-  /// Creates an index in the given Unicode scalars view that corresponds
-  /// exactly to the specified `UTF8View` position.
-  ///
-  /// If the position passed as `utf8Index` doesn't have an exact corresponding
-  /// position in `unicodeScalars`, the result of the initializer is `nil`.
-  /// For example, an attempt to convert the position of a UTF-8 continuation
-  /// byte returns `nil`.
-  ///
-  /// - Parameters:
-  ///   - utf8Index: A position in the `utf8` view of a string. `utf8Index`
-  ///     must be an element of `String(unicodeScalars).utf8.indices`.
-  ///   - unicodeScalars: The `UnicodeScalarView` in which to find the new
-  ///     position.
-  public init?(
-    _ utf8Index: String.UTF8Index,
-    within unicodeScalars: String.UnicodeScalarView
-  ) {
-    let core = unicodeScalars._core
-
-    _precondition(
-      utf8Index._coreIndex >= 0 && utf8Index._coreIndex <= core.endIndex,
-      "Invalid String.UTF8Index for this Unicode.Scalar view")
-
-    // Detect positions that have no corresponding index.
-    if !utf8Index._isOnUnicodeScalarBoundary(in: core) {
-      return nil
-    }
-    self.init(encodedOffset: utf8Index._coreIndex)
-  }
-
   /// Returns the position in the given string that corresponds exactly to this
   /// index.
   ///
