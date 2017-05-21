@@ -227,6 +227,7 @@ extension String {
     ///
     /// - Precondition: The next position is representable.
     public func index(after i: Index) -> Index {
+      _precondition(i != endIndex, "Can't advance past endIndex")
       if _fastPath(_core.isASCII) {
         return Index(encodedOffset: i.encodedOffset + 1)
       }
@@ -257,6 +258,7 @@ extension String {
     /// - Parameter position: A valid index of the view. `position`
     ///   must be less than the view's end index.
     public subscript(position: Index) -> UTF8.CodeUnit {
+      _precondition(position != endIndex, "cannot subscript using endIndex")
       if _fastPath(_core.isASCII) {
         return UTF8.CodeUnit(_core[position.encodedOffset])
       }
@@ -272,7 +274,6 @@ extension String {
           return encodedScalar[i]
         }
         j = _index(atEncodedOffset: j.encodedOffset)
-        _precondition(j != endIndex, "cannot subscript using endIndex")
       }
     }
 
@@ -338,6 +339,28 @@ extension String {
   ///
   /// If `utf8` is an ill-formed UTF-8 code sequence, the result is `nil`.
   ///
+  /// You can use this initializer to create a new string from
+  /// another string's `utf8` view.
+  ///
+  ///     let picnicGuest = "Deserving porcupine"
+  ///     if let i = picnicGuest.utf8.index(of: 32) {
+  ///         let adjective = String(picnicGuest.utf8[..<i])
+  ///         print(adjective)
+  ///     }
+  ///     // Prints "Optional(Deserving)"
+  ///
+  /// The `adjective` constant is created by calling this initializer with a
+  /// slice of the `picnicGuest.utf8` view.
+  ///
+  /// - Parameter utf8: A UTF-8 code sequence.
+  public init(_ utf8: UTF8View) {
+    self = String(utf8._core)
+  }
+
+  /// Creates a string corresponding to the given sequence of UTF-8 code units.
+  ///
+  /// If `utf8` is an ill-formed UTF-8 code sequence, the result is `nil`.
+  ///
   /// You can use this initializer to create a new string from a slice of
   /// another string's `utf8` view.
   ///
@@ -352,9 +375,8 @@ extension String {
   /// slice of the `picnicGuest.utf8` view.
   ///
   /// - Parameter utf8: A UTF-8 code sequence.
-  public init?(_ utf8: UTF8View) {
-    let wholeString = String(utf8._core)
-
+  public init?(_ utf8: UTF8View.SubSequence) {
+    let wholeString = String(utf8.base._core)
     if let start = utf8.startIndex.samePosition(in: wholeString),
        let end = utf8.endIndex.samePosition(in: wholeString) {
       self = wholeString[start..<end]

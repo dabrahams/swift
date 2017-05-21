@@ -643,7 +643,7 @@ public protocol Collection : _Indexable, Sequence
 {
   /// A type that represents the number of steps between a pair of
   /// indices.
-  associatedtype IndexDistance = Int
+  // associatedtype IndexDistance = Int
 
   /// A type that provides the collection's iteration interface and
   /// encapsulates its iteration state.
