@@ -512,3 +512,27 @@ extension String.UnicodeScalarView : CustomPlaygroundQuickLookable {
     return .text(description)
   }
 }
+
+// backward compatibility for index interchange.  
+extension String.UnicodeScalarView {
+  @available(swift, obsoleted: 4.0)
+  public func index(after i: Index?) -> Index {
+    return index(after: i)
+  }
+  @available(swift, obsoleted: 4.0)
+  public func index(
+    _ i: Index?,  offsetBy n: String.UnicodeScalarView.IndexDistance
+  ) -> Index {
+    return index(i!, offsetBy: n)
+  }
+  @available(swift, obsoleted: 4.0)
+  public func distance(
+    from i: Index?, to j: Index?
+  ) -> String.UnicodeScalarView.IndexDistance {
+    return distance(from: i!, to: j!)
+  }
+  @available(swift, obsoleted: 4.0)
+  public subscript(i: Index?) -> Unicode.Scalar {
+    return self[i!]
+  }
+}
