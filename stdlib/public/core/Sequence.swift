@@ -361,7 +361,7 @@ public protocol Sequence {
   /// - Note: implementors should ensure that the lifetime of the memory
   ///   persists throughout this call, typically by using
   ///   `withExtendedLifetime(self)`.
-  func withExistingUnsafeBuffer<R>(
+  func _withExistingUnsafeBuffer<R>(
     _ body: (UnsafeBufferPointer<Iterator.Element>) throws -> R
   ) rethrows -> R?
   
@@ -1053,7 +1053,7 @@ extension Sequence {
   }
 
   @_inlineable
-  public func withExistingUnsafeBuffer<R>(
+  public func _withExistingUnsafeBuffer<R>(
     _ body: (UnsafeBufferPointer<Iterator.Element>) throws -> R
   ) rethrows -> R? {
     return nil // by default, sequences have no contiguous storage.
