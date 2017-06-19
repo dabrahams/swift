@@ -760,6 +760,7 @@ extension Sequence {
   ///
   /// - Precondition: the elements of this sequence exactly fill the given
   ///   memory.
+  @inline(__always)
   public func _copyCompleteContents(
     initializing memory: UnsafeMutableBufferPointer<Iterator.Element>
   ) {
@@ -775,6 +776,7 @@ extension Sequence {
   /// Assigns this `Sequence`'s elements to the elements of `target`
   ///
   /// - Precondition: the elements of this sequence exactly fill `target`.
+  @inline(__always)
   public func _copyCompleteContents(
     assigning target: UnsafeMutableBufferPointer<Iterator.Element>
   ) {
@@ -1469,6 +1471,7 @@ extension Sequence {
   /// - Returns: an iterator over any remaining elements of `self` and the index
   ///   just beyond the newly-uninitialized memory.
   @_inlineable
+  @inline(__always)
   public func _copyContents(
     initializing buffer: UnsafeMutableBufferPointer<Element>
   ) -> (Iterator,UnsafeMutableBufferPointer<Element>.Index) {
@@ -1490,6 +1493,7 @@ extension Sequence {
   /// - Returns: an iterator over any remaining elements of `self` and the index
   ///   just beyond the assigned memory.
   @_inlineable
+  @inline(__always)
   public func _copyContents(
     assigning buffer: UnsafeMutableBufferPointer<Iterator.Element>
   ) -> (Iterator,UnsafeMutableBufferPointer<Iterator.Element>.Index) {
