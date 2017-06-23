@@ -1537,6 +1537,7 @@ public struct IteratorSequence<
   /// - Precondition: `next()` has not been applied to a copy of `self`
   ///   since the copy was made.
   @_inlineable
+  @inline(__always)
   public mutating func next() -> Base.Element? {
     return _base.next()
   }
