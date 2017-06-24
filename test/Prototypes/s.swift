@@ -28,7 +28,7 @@ where C0.Element == C1.Element, C1.Element == C2.Element {
 }
 
 extension _Concat3 : Sequence {
-  struct Iterator : IteratorProtocol {
+  struct Iterator : IteratorProtocol, Sequence {
     var i0: C0.Iterator
     var i1: C1.Iterator
     var i2: C2.Iterator
@@ -304,6 +304,15 @@ extension String._XContent {
   init() {
     self = .inline16(_Inline<UInt16>(EmptyCollection<UInt16>())!)
   }
+
+  internal var _elementWidth: Int {
+    switch self {
+    case .inline8, .latin1, .unowned8: return 1
+//    case .nsString(let x) where x._fastCStringContents(false) != nil:
+//      return 1
+    default: return 2
+    }
+  }
   
   func _existingLatin1(
     in scratch: inout _Scratch
@@ -376,7 +385,56 @@ struct _TruncExt<Input: BinaryInteger, Output: FixedWidthInteger>
 }
 
 extension String._XContent.UTF16View : Sequence {
-  struct Iterator : IteratorProtocol {
+  @inline(__always)
+  public func _copyContents(
+    initializing buffer: UnsafeMutableBufferPointer<UInt16>
+  ) -> (Iterator, UnsafeMutableBufferPointer<UInt16>.Index) {
+    switch _content {
+    case .inline8(var x):
+      let n = x.withUnsafeMutableBufferPointer {
+        _MapCollection(
+          $0, through: _TruncExt())._copyContents(initializing: buffer)
+      }.1
+      return (Iterator(_content, offset: n), n)
+    case .inline16(var x):
+      let n = x.withUnsafeMutableBufferPointer {
+        $0._copyContents(initializing: buffer)
+      }.1
+      return (Iterator(_content, offset: n), n)
+      
+    default: break
+    }
+    /*
+    var scratch = String._XContent._scratch()
+    defer {
+      _fixLifetime(self)
+      _fixLifetime(scratch)
+    }
+    switch _content {
+      case .inline8(let x): return x.count
+      case .inline16(let x): return x.count 
+      case .unowned8(let x): return Int(x._count) 
+      case .unowned16(let x): return Int(x._count) 
+      case .latin1(let x):  return x.count 
+      case .utf16(let x): return x.count 
+      case .nsString(let x): return x.length() 
+    }
+    if let b = _content._existingLatin1(in: &scratch) {
+      let (_, n) = _MapCollection(
+        b, through: _TruncExt()
+      )._copyContents(initializing: buffer)
+      
+      return (Iterator(_content, offset: n), n)
+    }
+    if let b = _content._existingUTF16(in: &scratch) {
+      let (_, n) = b._copyContents(initializing: buffer)
+      return (Iterator(_content, offset: n), n)
+    }
+    */
+    return self.makeIterator()._copyContents(initializing: buffer)
+  }
+  
+  struct Iterator : IteratorProtocol, Sequence {
     internal enum _Buffer {
     case deep8(UnsafePointer<UInt8>, UnsafePointer<UInt8>)
     case deep16(UnsafePointer<UInt16>, UnsafePointer<UInt16>)
@@ -388,34 +446,37 @@ extension String._XContent.UTF16View : Sequence {
     internal var _buffer: _Buffer
     internal var _owner: AnyObject?
 
-    init(_ content: String._XContent) {
+    @inline(__always)
+    init(_ content: String._XContent, offset: Int = 0) {
       switch content {
-      case .inline8(let x): _buffer = .inline8(x, 0)
-      case .inline16(let x): _buffer = .inline16(x, 0)
+      case .inline8(let x):
+        _buffer = .inline8(x, UInt8(extendingOrTruncating: offset))
+      case .inline16(let x):
+        _buffer = .inline16(x, UInt8(extendingOrTruncating: offset))
       case .unowned8(let x):
         _owner = nil
         let b = x.unsafeBuffer
         let s = b.baseAddress._unsafelyUnwrappedUnchecked
-        _buffer = _Buffer.deep8(s, s + b.count)
+        _buffer = _Buffer.deep8(s + offset, s + (b.count &- offset))
       case .unowned16(let x):
         _owner = nil
         let b = x.unsafeBuffer
         let s = b.baseAddress._unsafelyUnwrappedUnchecked
-        _buffer = _Buffer.deep16(s, s + b.count)
+        _buffer = _Buffer.deep16(s + offset, s + (b.count &- offset))
       case .latin1(let x):
         _owner = x
         _buffer = x.withUnsafeBufferPointer {
           let s = $0.baseAddress._unsafelyUnwrappedUnchecked
-          return .deep8(s, s + $0.count)
+          return .deep8(s + offset, s + ($0.count &- offset))
         }
       case .utf16(let x):
         _owner = nil
         _buffer = x.withUnsafeBufferPointer {
           let s = $0.baseAddress._unsafelyUnwrappedUnchecked
-          return .deep16(s, s + $0.count)
+          return .deep16(s + offset, s + ($0.count &- offset))
         }
       case .nsString(let x):
-        _buffer = .nsString(0)
+        _buffer = .nsString(offset)
         _owner = x
       }
     }
@@ -561,6 +622,21 @@ extension String._XContent.UTF16View : BidirectionalCollection {
   
   var startIndex: Int { return 0 }
   var endIndex: Int { return count }
+
+  public func _withExistingUnsafeBuffer<R>(
+    _ body: (UnsafeBufferPointer<Iterator.Element>) throws -> R
+  ) rethrows -> R? {
+    var scratch = String._XContent._scratch()
+    defer {
+      _fixLifetime(self)
+      _fixLifetime(scratch)
+    }
+    if let codeUnits = _content._existingUTF16(in: &scratch) {
+      return try body(codeUnits)
+    }
+    return nil
+  }
+  
   var count: Int {
     @inline(__always)
     get {
@@ -650,7 +726,14 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
       // If our storage is already wide enough, we're done
       if case .utf16 = _content { return true }
       if case .inline16 = _content { return true }
-      if (s._preprocessingPass { s.contains { $0 > 0xFF } } != true) {
+      
+      // FIXME: generalize this optimization using a protocol
+      if S.self == String._XContent.UTF16View.self {
+        if (s as! String._XContent.UTF16View)._content._elementWidth < 2 {
+          return true
+        }
+      }       
+      else if (s._preprocessingPass { s.contains { $0 > 0xFF } } != true) {
         return true
       }
       // Otherwise, widen when reserving
@@ -753,11 +836,10 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
         let availableCapacity = UnsafeMutableBufferPointer(
           start: buf.baseAddress._unsafelyUnwrappedUnchecked + x.count,
           count: buf.count - x.count)
-        let (newSource, copiedCount) = source._copyContents(
-          initializing: availableCapacity
-        )
+        var copiedCount = 0
+        (source, copiedCount) = source._copyContents(
+          initializing: availableCapacity)
         x.count += copiedCount
-        source = newSource
       }
     default: break
     }
