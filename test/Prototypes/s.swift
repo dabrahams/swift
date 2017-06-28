@@ -212,6 +212,8 @@ extension String._XContent._Inline {
   public mutating func withUnsafeMutableBufferPointer<R>(
     _ body: (UnsafeMutableBufferPointer<CodeUnit>)->R
   ) -> R {
+    let count = self.count
+    let capacity = self.capacity
     return withUnsafeMutablePointer(to: &_storage) {
       let start = UnsafeMutableRawPointer($0).bindMemory(
         to: CodeUnit.self,
@@ -227,6 +229,7 @@ extension String._XContent._Inline {
   public mutating func _withMutableCapacity<R>(
     body: (inout UnsafeMutableBufferPointer<CodeUnit>)->R
   ) -> R {
+    let capacity = self.capacity
     return self.withUnsafeMutableBufferPointer { buf in
       var fullBuf = UnsafeMutableBufferPointer(
         start: buf.baseAddress, count: capacity)
@@ -308,46 +311,41 @@ extension String._XContent {
   func _existingLatin1(
     in scratch: inout _Scratch
   ) -> UnsafeBufferPointer<UInt8>? {
-    switch self {
-    case .inline8(let x): return x.copiedToUnsafeBuffer(in: &scratch)
-    case .latin1(let x): return x.withUnsafeBufferPointer { return $0 }
-    case .unowned8(let x): return x.unsafeBuffer
+    if let x = _inline8 { return x.copiedToUnsafeBuffer(in: &scratch) }
+    if let x = _latin1 { return x.withUnsafeBufferPointer { return $0 } }
+    if let x = _unowned8 { return x.unsafeBuffer }
       /*
     case .nsString(let x):
       return x._fastCStringContents(false).map {
         UnsafeBufferPointer(start: x, count: x.length())
       }
       */
-    default: return nil
-    }
+    return nil
   }
 
   func _existingUTF16(
     in scratch: inout _Scratch
   ) -> UnsafeBufferPointer<UInt16>? {
-    switch self {
-    case .inline16(let x): return x.copiedToUnsafeBuffer(in: &scratch)
-    case .utf16(let x): return x.withUnsafeBufferPointer { return $0 }
-    case .unowned16(let x): return x.unsafeBuffer
-    case .nsString(let x):
+    if let x = _inline16 { return x.copiedToUnsafeBuffer(in: &scratch) }
+    if let x = _utf16 { return x.withUnsafeBufferPointer { $0 } }
+    if let x = _unowned16 { return x.unsafeBuffer }
+    if let x = _nsstring {
       return x._fastCharacterContents().map {
         UnsafeBufferPointer(start: $0, count: x.length())
       }
-    default: return nil
     }
+    return nil
   }
 
   var isASCII: Bool? {
     get {
-      switch self {
-      case .inline8(let x): return x.isASCII
-      case .inline16(let x): return x.isASCII 
-      case .unowned8(let x): return x.isASCII
-      case .unowned16(let x): return x.isASCII
-      case .latin1(let x):  return x.isASCII
-      case .utf16(let x): return x.isASCII
-      case .nsString: return nil
-      }
+      if let x = _inline8 { return x.isASCII }
+      if let x = _inline16 { return x.isASCII  }
+      if let x = _unowned8 { return x.isASCII }
+      if let x = _unowned16 { return x.isASCII }
+      if let x = _latin1 { return x.isASCII }
+      if let x = _utf16 { return x.isASCII }
+      return nil
     }
   }
 }
@@ -358,13 +356,10 @@ extension String._XContent {
   }
   
   var _nsString : _NSStringCore {
-    switch self {
-    case .nsString(let x): return x
-    case .utf16(let x): return x
-    case .latin1(let x): return x
-    default:
-      _sanityCheckFailure("unreachable")
-    }
+    if let x = _nsstring { return x }
+    if let x = _utf16 { return x }
+    if let x = _latin1 { return x }
+    _sanityCheckFailure("unreachable")
   }
 }
 
@@ -389,34 +384,41 @@ extension String._XContent.UTF16View : Sequence {
     internal var _owner: AnyObject?
 
     init(_ content: String._XContent) {
-      switch content {
-      case .inline8(let x): _buffer = .inline8(x, 0)
-      case .inline16(let x): _buffer = .inline16(x, 0)
-      case .unowned8(let x):
+      defer { _fixLifetime(content) }
+      if let x = content._inline8 { _buffer = .inline8(x, 0) }
+      else if let x = content._inline16 { _buffer = .inline16(x, 0) }
+      else if let x = content._unowned8 {
         _owner = nil
         let b = x.unsafeBuffer
         let s = b.baseAddress._unsafelyUnwrappedUnchecked
         _buffer = _Buffer.deep8(s, s + b.count)
-      case .unowned16(let x):
+      }
+      else if let x = content._unowned16 {
         _owner = nil
         let b = x.unsafeBuffer
         let s = b.baseAddress._unsafelyUnwrappedUnchecked
         _buffer = _Buffer.deep16(s, s + b.count)
-      case .latin1(let x):
+      }
+      else if let x = content._latin1 {
         _owner = x
         _buffer = x.withUnsafeBufferPointer {
           let s = $0.baseAddress._unsafelyUnwrappedUnchecked
           return .deep8(s, s + $0.count)
         }
-      case .utf16(let x):
-        _owner = nil
+      }
+      else if let x = content._utf16 {
+        _owner = x
         _buffer = x.withUnsafeBufferPointer {
           let s = $0.baseAddress._unsafelyUnwrappedUnchecked
           return .deep16(s, s + $0.count)
         }
-      case .nsString(let x):
+      }
+      else if let x = content._nsstring {
         _buffer = .nsString(0)
         _owner = x
+      }
+      else {
+        _sanityCheckFailure("Unreachable")
       }
     }
 
@@ -564,36 +566,35 @@ extension String._XContent.UTF16View : BidirectionalCollection {
   var count: Int {
     @inline(__always)
     get {
-      switch self._content {
-      case .inline8(let x): return x.count
-      case .inline16(let x): return x.count 
-      case .unowned8(let x): return Int(x._count) 
-      case .unowned16(let x): return Int(x._count) 
-      case .latin1(let x):  return x.count 
-      case .utf16(let x): return x.count 
-      case .nsString(let x): return x.length() 
-      }
+      if let x = _content._inline8 { return x.count }
+      if let x = _content._inline16 { return x.count }
+      if let x = _content._unowned8  { return Int(x._count) }
+      if let x = _content._unowned16  { return Int(x._count) }
+      if let x = _content._latin1 { return x.count }
+      if let x = _content._utf16 { return x.count }
+      if let x = _content._nsstring { return x.length() }
+      _sanityCheckFailure("unreachable")
     }
   }
   
   subscript(i: Int) -> UInt16 {
     @inline(__always)
     get {
-      switch self._content {
-      case .inline8(var x):
+      if var x = _content._inline8 {
         return x.withUnsafeMutableBufferPointer { UInt16($0[i]) }
-      case .inline16(var x):
-        return x.withUnsafeMutableBufferPointer { $0[i] }
-      case .unowned8(let x): return UInt16(x.unsafeBuffer[i])
-      case .unowned16(let x): return x.unsafeBuffer[i]
-      case .latin1(let x): return UInt16(x[i])
-      case .utf16(let x): return x[i]
-      case .nsString(let x):
-        return x.characterAtIndex(i)
       }
+      if var x = _content._inline16 {
+        return x.withUnsafeMutableBufferPointer { $0[i] }
+      }
+      if let x = _content._unowned8  { return UInt16(x.unsafeBuffer[i]) }
+      if let x = _content._unowned16  { return x.unsafeBuffer[i] }
+      if let x = _content._latin1 { return UInt16(x[i]) }
+      if let x = _content._utf16 { return x[i] }
+      if let x = _content._nsstring { return x.characterAtIndex(i) }
+      _sanityCheckFailure("unreachable")
     }
   }
-
+  
   func index(after i: Int) -> Int { return i + 1 }
   func index(before i: Int) -> Int { return i - 1 }
 }
@@ -601,15 +602,14 @@ extension String._XContent.UTF16View : BidirectionalCollection {
 extension String._XContent.UTF16View : RangeReplaceableCollection {
   public var capacity: Int {
     get {
-      switch self._content {
-      case .inline8(let x): return x.capacity
-      case .inline16(let x): return x.capacity
-      case .unowned8(let x): return Int(x._count)
-      case .unowned16(let x): return Int(x._count)
-      case .latin1(let x): return x.capacity
-      case .utf16(let x): return x.capacity
-      case .nsString(let x): return x.length()
-      }
+      if let x = _content._inline8 { return x.capacity }
+      if let x = _content._inline16 { return x.capacity }
+      if let x = _content._unowned8  { return Int(x._count) }
+      if let x = _content._unowned16  { return Int(x._count) }
+      if let x = _content._latin1 { return x.capacity }
+      if let x = _content._utf16 { return x.capacity }
+      if let x = _content._nsstring { return x.length() }
+      _sanityCheckFailure("unreachable")
     }
   }
   
@@ -618,11 +618,9 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
   }
 
   internal var _rangeReplaceableStorageID: ObjectIdentifier? {
-    switch self._content {
-    case .latin1(let x): return ObjectIdentifier(x)
-    case .utf16(let x): return ObjectIdentifier(x)
-    default: return nil
-    }
+    if let x = _content._latin1 { return ObjectIdentifier(x) }
+    if let x = _content._utf16 { return ObjectIdentifier(x) }
+    return nil
   }
 
   internal var _dynamicStorageIsMutable: Bool? {
@@ -708,8 +706,10 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
     var source = IteratorSequence(source_.makeIterator())
     defer { _fixLifetime(self) }
 
-    switch _content {
-    case .inline8(var x):
+    if _slowPath(!knownMutable && _dynamicStorageIsMutable == false) {
+      // skip the fast path in this case
+    }
+    else if var x = _content._inline8 {
       x._withMutableCapacity { buf in
         for i in count..<buf.count {
           let u = source.next()
@@ -722,8 +722,8 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
           buf[i] = UInt8(extendingOrTruncating: u!)
         }
       }
-      
-    case .latin1(let x) where knownMutable || _dynamicStorageIsMutable != false:
+    }
+    else if let x = _content._latin1 {
       x._withMutableCapacity { buf in
         for i in count..<buf.count {
           guard let u = source.next() else { break }
@@ -735,8 +735,8 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
           x.count += 1
         }
       }
-      
-    case .inline16(var x):
+    }
+    else if var x = _content._inline16 {
       x._withMutableCapacity { buf in
         for i in count..<buf.count {
           let u = source.next()
@@ -747,8 +747,8 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
           buf[i] = u!
         }
       }
-      
-    case .utf16(let x) where knownMutable || _dynamicStorageIsMutable != false:
+    }
+    else if let x = _content._utf16 {
       x._withMutableCapacity { buf in
         let availableCapacity = UnsafeMutableBufferPointer(
           start: buf.baseAddress._unsafelyUnwrappedUnchecked + x.count,
@@ -759,7 +759,6 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
         x.count += copiedCount
         source = newSource
       }
-    default: break
     }
     for u in source { append(u) }
   }
@@ -771,30 +770,27 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
     
     // In-place mutation
     if _fastPath(knownUnique || _dynamicStorageIsMutable != false) {
-      switch self._content {
-      case .inline8(var x) where u <= 0xFF:
+      if u <= 0xFF, var x = _content._inline8 {
         x.append(UInt8(u))
         self._content = .inline8(x)
         return
-
-      case .inline16(var x):
+      }
+      else if var x = _content._inline16 {
         x.append(u)
         self._content = .inline16(x)
         return
-
-      case .latin1(let x) where u <= 0xFF:
+      }
+      else if u <= 0xFF, let x = _content._latin1 {
         x.append(UInt8(u))
         return
-        
-      case .utf16(let x):
+      }
+      else if let x = _content._utf16  {
         x.append(u)
         return
-        
-      default: break
       }
-      _replaceSubrangeSlow(
-        endIndex..<endIndex, with: CollectionOfOne(u), maxNewElement: u)
     }
+    _replaceSubrangeSlow(
+      endIndex..<endIndex, with: CollectionOfOne(u), maxNewElement: u)
   }
 
   mutating func replaceSubrange<C : Collection>(
@@ -808,8 +804,7 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
     
     // In-place dynamic buffer
     if _dynamicStorageIsMutable == true {
-      switch self._content {
-      case .latin1(let x):
+      if let x = _content._latin1 {
         maxNewElement = newElements.max() ?? 0
         if maxNewElement! <= 0xFF && x._tryToReplaceSubrange(
           target,
@@ -817,11 +812,11 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
         ) {
           return
         }
-      case .utf16(let x):
+      }
+      else if let x = _content._utf16 {
         if x._tryToReplaceSubrange(target, with: newElements) {
           return
         }
-      default: break
       }
     }
     _replaceSubrangeSlow(
