@@ -482,17 +482,6 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
       self._content = .init(
         String._UTF16Storage.copying(codeUnits, minCapacity: minCapacity))
     }
-    else if let codeUnits = _content._existingLatin1(in: &scratch) {
-      do {
-        self._content = .init(
-          String._UTF16Storage.copying(
-            _MapCollection(codeUnits, through: _TruncExt()),
-            minCapacity: minCapacity,
-            maxElement: _content.isASCII == true ? 0x7F
-            : _content.isASCII == false ? 0xFF : nil)
-        )
-      }
-    }
     else {
       self._content = .init(
         String._UTF16Storage.copying(self, minCapacity: minCapacity))
