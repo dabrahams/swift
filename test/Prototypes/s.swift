@@ -721,10 +721,9 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
   ///
   /// - Returns: `true` if `self` is known to have mutable capacity.
   @inline(__always)
-  mutating func _reserveCapacity<S: Sequence>(forAppending s: S) -> Bool
+  mutating func _reserveCapacity<S: Sequence>(forAppending s: S)
   where S.Element == UInt16 {
     let growth = s.underestimatedCount
-    guard growth > 0 else { return false }
 
     let minCapacity = count + growth
 
@@ -733,10 +732,10 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
     // We have enough capacity and can write our storage
     if _fastPath(capacity >= minCapacity && _dynamicStorageIsMutable != false) {
       // If our storage is already wide enough, we're done
-      if _content._layout == .utf16 { return true }
-      if _content._layout == .inline16 { return true }
+      if _content._layout == .utf16 { return }
+      if _content._layout == .inline16 { return }
       if (s._preprocessingPass { s.contains { $0 > 0xFF } } != true) {
-        return true
+        return
       }
       // Otherwise, widen when reserving
       forceUTF16 = true
@@ -744,7 +743,7 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
     
     _allocateCapacity(
       Swift.max(minCapacity, 2 * count), forcingUTF16: forceUTF16)
-    return true
+    return
   }
 
   mutating func _allocateCapacity(_ minCapacity: Int, forcingUTF16: Bool) {
@@ -788,15 +787,12 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
 
   mutating func append<S: Sequence>(contentsOf source_: S)
   where S.Element == Element {
-    let knownMutable = _reserveCapacity(forAppending: source_)
+    _reserveCapacity(forAppending: source_)
     
-    var source = IteratorSequence(source_.makeIterator())
+    var source = source_.makeIterator()
     defer { _fixLifetime(self) }
 
-    if _slowPath(!knownMutable && _dynamicStorageIsMutable == false) {
-      // skip the fast path in this case
-    }
-    else if var x = _content._inline8 {
+    if var x = _content._inline8 {
       x._withMutableCapacity { buf in
         for i in count..<buf.count {
           let u = source.next()
@@ -842,22 +838,20 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
       let availableCapacity = UnsafeMutableBufferPointer(
         start: buf.baseAddress._unsafelyUnwrappedUnchecked + x.count,
         count: buf.count - x.count)
-      let (newSource, copiedCount) = source._copyContents(
+      let (newSource, copiedCount) = source_._copyContents(
         initializing: availableCapacity
       )
       x.count += copiedCount
       source = newSource
     }
-    for u in source { append(u) }
+    while let u = source.next() { append(u) }
   }
 
   mutating func append(_ u: UInt16) {
-    let knownUnique = _reserveCapacity(forAppending: CollectionOfOne(u))
-    
-    defer { _fixLifetime(self) }
+    _reserveCapacity(forAppending: CollectionOfOne(u))
     
     // In-place mutation
-    if _fastPath(knownUnique || _dynamicStorageIsMutable != false) {
+    if true {
       if u <= 0xFF, var x = _content._inline8 {
         x.append(UInt8(u))
         self._content = .init(x)
