@@ -122,10 +122,10 @@ extension _Concat3 : Collection {
 extension String {
   internal struct _XContent {
     var _ownerX: AnyObject = unsafeBitCast(_objCTaggedPointerBits, to: AnyObject.self)
-    enum _Layout : UInt8 { case inline8, inline16, unowned8, unowned16, latin1, utf16, nsString }
+    enum _Layout : UInt8 { case /*inline8, inline16, unowned8, unowned16, latin1,*/ utf16/*, nsString*/ }
     
     typealias _InlineStorage = (UInt64, UInt32, UInt16, UInt8)
-    var _inlineBits: (_InlineStorage, UInt8)
+    var _inlineBits: ((), UInt8)
     
     var _layout: _Layout {
       get {
@@ -141,7 +141,7 @@ extension String {
       var _flags: UInt8 = 0
     }
 
-    
+/*    
     public var _inline8: _Inline<UInt8>? {
       guard _layout == .inline8 else { return nil }
       return unsafeBitCast(_inlineBits, to: _Inline<UInt8>.self)
@@ -227,19 +227,19 @@ extension String {
       _ownerX = x
       _inlineBits = ((0,0,0,0), UInt8(_Layout.latin1.rawValue))
     }
-
+    */
     public var _utf16: _UTF16Storage {
       _sanityCheck(_layout == .utf16)
       return unsafeBitCast(
         _ownerX,
         to: _UTF16Storage.self)
     }
-    
+
     init(_ x: _UTF16Storage) {
       _ownerX = x
-      _inlineBits = ((0,0,0,0), UInt8(_Layout.utf16.rawValue))
+      _inlineBits = ((), UInt8(_Layout.utf16.rawValue))
     }
-    
+    /*
     public var _nsstring: _NSStringCore  {
       _sanityCheck(_layout == .nsString)
       return unsafeBitCast(
@@ -250,6 +250,7 @@ extension String {
       _ownerX = x
       _inlineBits = ((0,0,0,0), UInt8(_Layout.nsString.rawValue))
     }
+    */
   }
 }
 
@@ -359,7 +360,7 @@ extension String._XContent._Inline where CodeUnit == UInt16 {
   }
   
 }
-
+/*
 extension String._XContent._Unowned {
   init?(
     _ source: UnsafeBufferPointer<CodeUnit>,
@@ -381,24 +382,29 @@ extension String._XContent._Unowned {
     return UnsafeBufferPointer(start: _start, count: Int(_count))
   }
 }
+*/
 
 extension String._XContent {
 
   init() {
+    self.init(String._UTF16Storage())
+    /*
     _inlineBits = (
       (0, 0, 0, 0), UInt8(extendingOrTruncating: _Layout.inline16.rawValue))
     _sanityCheck(_layout == .inline16)
     _sanityCheck(_inline16!.count == 0)
+    */
   }
   
   func _existingLatin1(
     in scratch: inout _Scratch
   ) -> UnsafeBufferPointer<UInt8>? {
-    if let x = _inline8 { return x.copiedToUnsafeBuffer(in: &scratch) }
+/*    if let x = _inline8 { return x.copiedToUnsafeBuffer(in: &scratch) }
     if _layout == .latin1 {
       return _latin1.withUnsafeBufferPointer { return $0 }
     }
     if let x = _unowned8 { return x.unsafeBuffer }
+    */
       /*
     case .nsString(let x):
       return x._fastCStringContents(false).map {
@@ -411,24 +417,28 @@ extension String._XContent {
   func _existingUTF16(
     in scratch: inout _Scratch
   ) -> UnsafeBufferPointer<UInt16>? {
-    if let x = _inline16 { return x.copiedToUnsafeBuffer(in: &scratch) }
+//    if let x = _inline16 { return x.copiedToUnsafeBuffer(in: &scratch) }
     if _layout == .utf16 { return _utf16.withUnsafeBufferPointer { $0 } }
+    /*
     if let x = _unowned16 { return x.unsafeBuffer }
     if _layout == .nsString {
       return _nsstring._fastCharacterContents().map {
         UnsafeBufferPointer(start: $0, count: _nsstring.length())
       }
     }
+    */
     return nil
   }
 
   var isASCII: Bool? {
     get {
+      /*
       if let x = _inline8 { return x.isASCII }
       if let x = _inline16 { return x.isASCII  }
       if let x = _unowned8 { return x.isASCII }
       if let x = _unowned16 { return x.isASCII }
       if _layout == .latin1 { return _latin1.isASCII }
+      */
       if _layout == .utf16 { return _utf16.isASCII }
       return nil
     }
@@ -442,8 +452,10 @@ extension String._XContent {
   
   var _nsString : _NSStringCore {
     if _layout == .utf16 { return _utf16 }
+    /*
     if _layout == .latin1 { return _latin1 }
     if _layout == .nsString { return _nsstring }
+    */
     _sanityCheckFailure("unreachable")
   }
 }
@@ -471,6 +483,7 @@ extension String._XContent.UTF16View : Sequence {
     @inline(__always)
     init(_ content: String._XContent) {
       defer { _fixLifetime(content) }
+      /*
       if let x = content._inline8 { _buffer = .inline8(x, 0) }
       else if let x = content._inline16 { _buffer = .inline16(x, 0) }
       else if let x = content._unowned8 {
@@ -493,7 +506,7 @@ extension String._XContent.UTF16View : Sequence {
           return .deep8(s, s + $0.count)
         }
       }
-      else if content._layout == .utf16 {
+      else */if content._layout == .utf16 {
         let x = content._utf16
         _owner = x
         _buffer = x.withUnsafeBufferPointer {
@@ -501,10 +514,12 @@ extension String._XContent.UTF16View : Sequence {
           return .deep16(s, s + $0.count)
         }
       }
+      /*
       else if content._layout == .nsString {
         _buffer = .nsString(0)
         _owner = content._nsstring
       }
+      */
       else {
         _sanityCheckFailure("Unreachable")
       }
@@ -553,14 +568,16 @@ extension String._XContent.UTF16View : BidirectionalCollection {
     _ c: C, maxElement: UInt16? = nil, minCapacity: Int = 0
   )
   where C.Element == UInt16 {
+    /*
     if let x = String._XContent._Inline<UInt8>(c) {
       _content = .init(x)
     }
     else if let x = String._XContent._Inline<UInt16>(c) {
       _content = .init(x)
     }
-    else  {
+    else*/do  {
       let maxCodeUnit = maxElement ?? c.max() ?? 0
+      /*
       if maxCodeUnit <= 0xFF {
         _content = .init(
           unsafeBitCast(
@@ -570,7 +587,7 @@ extension String._XContent.UTF16View : BidirectionalCollection {
               isASCII: maxCodeUnit <= 0x7f),
             to: String._Latin1Storage.self))
       }
-      else {
+      else*/do {
         _content = .init(
           unsafeBitCast(
             _mkUTF16(
@@ -581,7 +598,8 @@ extension String._XContent.UTF16View : BidirectionalCollection {
       }
     }
   }
-  
+
+  /*
   init<C : Collection>(
     _ c: C, minCapacity: Int = 0, isASCII: Bool? = nil
   ) where C.Element == UInt8 {
@@ -595,7 +613,9 @@ extension String._XContent.UTF16View : BidirectionalCollection {
           to: String._Latin1Storage.self))
     }
   }
-  
+  */
+
+  /*
   init(
     unowned source: UnsafeBufferPointer<UInt8>,
     isASCII: Bool?,
@@ -649,19 +669,22 @@ extension String._XContent.UTF16View : BidirectionalCollection {
           _mkUTF16(source), to: String._UTF16Storage.self))
     }
   }
+  */
   
   var startIndex: Int { return 0 }
   var endIndex: Int { return count }
   var count: Int {
     @inline(__always)
     get {
+      /*
       if let x = _content._inline8 { return x.count }
       if let x = _content._inline16 { return x.count }
       if let x = _content._unowned8  { return Int(x._count) }
       if let x = _content._unowned16  { return Int(x._count) }
       if _content._layout == .latin1 { return _content._latin1.count }
-      if _content._layout == .utf16 { return _content._utf16.count }
-      if _content._layout == .nsString { return _content._nsstring.length() }
+      */
+      if _content._layout == .utf16 { return _content._utf16.count }      
+//      if _content._layout == .nsString { return _content._nsstring.length() }
       _sanityCheckFailure("unreachable")
     }
   }
@@ -669,6 +692,7 @@ extension String._XContent.UTF16View : BidirectionalCollection {
   subscript(i: Int) -> UInt16 {
     @inline(__always)
     get {
+      /*
       if var x = _content._inline8 {
         return x.withUnsafeMutableBufferPointer { UInt16($0[i]) }
       }
@@ -678,10 +702,13 @@ extension String._XContent.UTF16View : BidirectionalCollection {
       if let x = _content._unowned8  { return UInt16(x.unsafeBuffer[i]) }
       if let x = _content._unowned16  { return x.unsafeBuffer[i] }
       if _content._layout == .latin1 { return UInt16(_content._latin1[i]) }
+      */
       if _content._layout == .utf16 { return _content._utf16[i] }
+      /*
       if _content._layout == .nsString {
         return _content._nsstring.characterAtIndex(i)
       }
+      */
       _sanityCheckFailure("unreachable")
     }
   }
@@ -694,13 +721,15 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
   public var capacity: Int {
     @inline(__always)
     get {
+      /*
       if let x = _content._inline8 { return x.capacity }
       if let x = _content._inline16 { return x.capacity }
       if let x = _content._unowned8  { return Int(x._count) }
       if let x = _content._unowned16  { return Int(x._count) }
       if _content._layout == .latin1 { return _content._latin1.capacity }
+      */
       if _content._layout == .utf16 { return _content._utf16.capacity }
-      if _content._layout == .nsString { return count }
+//      if _content._layout == .nsString { return count }
       _sanityCheckFailure("unreachable")
     }
   }
@@ -711,7 +740,7 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
 
   internal var _dynamicStorageIsMutable: Bool? {
     mutating get {
-      return _content._layout == .utf16 || _content._layout == .latin1 ?
+      return _content._layout == .utf16/* || _content._layout == .latin1*/ ?
       isKnownUniquelyReferenced(&_content._ownerX) : nil
     }
   }
@@ -733,12 +762,14 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
     if _fastPath(capacity >= minCapacity && _dynamicStorageIsMutable != false) {
       // If our storage is already wide enough, we're done
       if _content._layout == .utf16 { return }
+      /*
       if _content._layout == .inline16 { return }
       if (s._preprocessingPass { s.contains { $0 > 0xFF } } != true) {
         return
       }
       // Otherwise, widen when reserving
       forceUTF16 = true
+      */
     }
     
     _allocateCapacity(
@@ -758,12 +789,13 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
         String._UTF16Storage.copying(codeUnits, minCapacity: minCapacity))
     }
     else if let codeUnits = _content._existingLatin1(in: &scratch) {
+      /*
       if !forcingUTF16 {
         self._content = .init(
           String._Latin1Storage.copying(
             codeUnits, minCapacity: minCapacity, isASCII: _content.isASCII))
       }
-      else {
+      else*/do {
         self._content = .init(
           String._UTF16Storage.copying(
             _MapCollection(codeUnits, through: _TruncExt()),
@@ -792,6 +824,7 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
     var source = source_.makeIterator()
     defer { _fixLifetime(self) }
 
+    /*
     if var x = _content._inline8 {
       x._withMutableCapacity { buf in
         for i in count..<buf.count {
@@ -832,7 +865,7 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
         }
       }
     }
-    else if _content._layout == .utf16 {
+    else */ if _content._layout == .utf16 {
       let x = _content._utf16
       let buf = x._mutableCapacity
       let availableCapacity = UnsafeMutableBufferPointer(
@@ -852,6 +885,7 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
     
     // In-place mutation
     if true {
+      /*
       if u <= 0xFF, var x = _content._inline8 {
         x.append(UInt8(u))
         self._content = .init(x)
@@ -866,7 +900,7 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
         _content._latin1.append(UInt8(u))
         return
       }
-      else if _content._layout == .utf16 {
+      else*/ if _content._layout == .utf16 {
         _content._utf16.append(u)
         return
       }
@@ -886,6 +920,7 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
     
     // In-place dynamic buffer
     if _dynamicStorageIsMutable == true {
+      /*
       if _content._layout == .latin1 {
         let x = _content._latin1
         maxNewElement = newElements.max() ?? 0
@@ -896,7 +931,7 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
           return
         }
       }
-      else if _content._layout == .utf16 {
+      else*/ if _content._layout == .utf16 {
         if _content._utf16._tryToReplaceSubrange(target, with: newElements) {
           return
         }
@@ -919,7 +954,8 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
       _fixLifetime(self)
       _fixLifetime(scratch)
     }
-    
+
+    /*
     if let codeUnits = _content._existingLatin1(in: &scratch),
     (
       maxNewElement.map { $0 <= 0xFF }
@@ -933,7 +969,7 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
         minCapacity: minCapacity
       )
     }
-    else if let codeUnits = _content._existingUTF16(in: &scratch) {
+    else */ if let codeUnits = _content._existingUTF16(in: &scratch) {
       self = .init(
         _Concat3(
           codeUnits[..<target.lowerBound],
@@ -959,6 +995,7 @@ extension String._XContent.UTF16View {
     var isASCII: Bool? = nil
     
     defer { _fixLifetime(source) }
+    /*
     if let x = String._XContent._Inline<UInt8>(source) {
       _content = .init(x)
       return
@@ -993,16 +1030,16 @@ extension String._XContent.UTF16View {
         }
       }
     }
-    
-    if isASCII == true || !source.contains { $0 > 0xff } {
+    if isASCII != false && !source.contains { $0 > 0xff } {
       self = String._XContent.UTF16View(
         _MapCollection(source, through: _TruncExt()),
         isASCII: isASCII ?? false
       )
     }
     else {
+    */
       self = String._XContent.UTF16View(source)
-    }
+//    }
   }
 }
 
@@ -1055,6 +1092,7 @@ func testme2() {
   }
 
   var total = 0
+  /*
   @inline(never)
   func lex_new() {
     time {
@@ -1121,10 +1159,11 @@ func testme2() {
   }
   concat3Iteration()
   print()
-  
+  */  
   let a_old = "a"._core
   let a_new = String._XContent.UTF16View(a_old)
-  
+
+  /*
   let short8_old = ["b","c","d","pizza"].map { $0._core }
   let short8_new = short8_old.map { String._XContent.UTF16View($0) }
   
@@ -1156,7 +1195,7 @@ func testme2() {
   }
   buildString_new()
   print()
-  
+  */
   let short16_old = ["🎉","c","d","pizza"].map { $0._core }
   let short16_new = short16_old.map { String._XContent.UTF16View($0) }
 
@@ -1188,7 +1227,7 @@ func testme2() {
   }
   buildStringUTF16_new()
   print()
-  
+  /*
   let ghost_old = "👻"._core
   let ghost_new = String._XContent.UTF16View(ghost_old)
   
@@ -1262,7 +1301,7 @@ func testme2() {
     }
   }
   buildShortStringUTF16_old()
-  
+
   @inline(never)
   func  buildShortStringUTF16_new() {
     time {
@@ -1300,6 +1339,7 @@ func testme2() {
     }
   }
   buildShortStringLong_new()
+  */
   print()
   
   if total == 0 { print() }
