@@ -124,8 +124,6 @@ extension String {
     var _ownerX: AnyObject = unsafeBitCast(_objCTaggedPointerBits, to: AnyObject.self)
     enum _Layout { case utf16 }
     
-    typealias _InlineStorage = (UInt64, UInt32, UInt16, UInt8)
-    
     var _layout: _Layout {
 
       get {
@@ -136,11 +134,6 @@ extension String {
       }
     }
     
-    internal struct _Inline<CodeUnit : FixedWidthInteger> {
-      var _storage: _InlineStorage
-      var _flags: UInt8 = 0
-    }
-
     public var _utf16: _UTF16Storage {
       _sanityCheck(_layout == .utf16)
       return unsafeBitCast(
@@ -151,7 +144,6 @@ extension String {
     init(_ x: _UTF16Storage) {
       _ownerX = x
     }
-    
   }
 }
 
@@ -159,109 +151,6 @@ extension String._XContent {
   public typealias _Scratch = (UInt64, UInt64)
   internal static func _scratch() -> _Scratch { return (0,0) }
 }
-
-extension String._XContent._Inline {
-  public var capacity: Int {
-    return MemoryLayout.size(ofValue: _storage)
-      / MemoryLayout<CodeUnit>.stride
-  }
-
-  public var count : Int {
-    get {
-      return Int(_flags &>> 4)
-    }
-    
-    set {
-      _flags = _flags & 0b1111 | UInt8(extendingOrTruncating: newValue) &<< 4
-    }
-  }
-  
-  public init?<S: Sequence>(_ s: S) where S.Element : BinaryInteger {
-    _storage = (0,0,0,0)
-    let failed: Bool = withUnsafeMutableBufferPointer {
-      let start = $0.baseAddress._unsafelyUnwrappedUnchecked
-      for i in s {
-        guard count < capacity, let u = CodeUnit(exactly: i)
-        else { return true }
-        start[count] = u
-        count = count &+ 1
-      }
-      return false
-    }
-    if failed { return nil }
-  }
-
-  public mutating func withUnsafeMutableBufferPointer<R>(
-    _ body: (UnsafeMutableBufferPointer<CodeUnit>)->R
-  ) -> R {
-    let count = self.count
-    let capacity = self.capacity
-    return withUnsafeMutablePointer(to: &_storage) {
-      let start = UnsafeMutableRawPointer($0).bindMemory(
-        to: CodeUnit.self,
-        capacity: capacity
-      )
-      return body(
-        UnsafeMutableBufferPointer(start: start, count: count))
-    }
-  }
-
-  /// Calls `body` on a mutable buffer that covers the entire extent of
-  /// allocated memory.
-  public mutating func _withMutableCapacity<R>(
-    body: (inout UnsafeMutableBufferPointer<CodeUnit>)->R
-  ) -> R {
-    let capacity = self.capacity
-    return self.withUnsafeMutableBufferPointer { buf in
-      var fullBuf = UnsafeMutableBufferPointer(
-        start: buf.baseAddress, count: capacity)
-      return body(&fullBuf)
-    }
-  }
-  
-  public func copiedToUnsafeBuffer(in scratch: inout String._XContent._Scratch)
-  -> UnsafeBufferPointer<CodeUnit> {
-    return withUnsafeMutablePointer(to: &scratch) {
-      UnsafeMutableRawPointer($0).storeBytes(
-        of: _storage, as: String._XContent._InlineStorage.self)
-      
-      let start = UnsafeRawPointer($0).bindMemory(
-        to: CodeUnit.self,
-        capacity: capacity
-      )
-      _sanityCheck(start[count] == 0)
-      return UnsafeBufferPointer(start: start, count: count)
-    }
-  }
-
-  public mutating func append(_ u: CodeUnit) {
-    let oldCount = count
-    count = count &+ 1
-    withUnsafeMutableBufferPointer { $0[oldCount] = u }
-  }
-}
-
-extension String._XContent._Inline where CodeUnit == UInt8 {
-  internal var isASCII : Bool {
-    return (UInt64(_storage.0) | UInt64(_storage.1) | UInt64(_storage.2))
-      & (0x8080_8080__8080_8080 as UInt64).littleEndian == 0
-  }
-}
-
-extension String._XContent._Inline where CodeUnit == UInt16 {
-  
-  internal var isASCII : Bool {
-    return (UInt64(_storage.0) | UInt64(_storage.1) | UInt64(_storage.2))
-      & (0xFF80_FF80__FF80_FF80 as UInt64).littleEndian == 0
-  }
-  
-  internal var isLatin1 : Bool {
-    return (UInt64(_storage.0) | UInt64(_storage.1) | UInt64(_storage.2))
-      & (0xFF00_FF00__FF00_FF00 as UInt64).littleEndian == 0
-  }
-  
-}
-
 
 extension String._XContent {
 
@@ -319,8 +208,8 @@ extension String._XContent.UTF16View : Sequence {
     internal enum _Buffer {
     case deep8(UnsafePointer<UInt8>, UnsafePointer<UInt8>)
     case deep16(UnsafePointer<UInt16>, UnsafePointer<UInt16>)
-    case inline8(String._XContent._Inline<UInt8>, UInt8)
-    case inline16(String._XContent._Inline<UInt16>, UInt8)
+    case inline8(UInt, UInt8)
+    case inline16(UInt, UInt8)
     case nsString(Int)
     }
     
@@ -356,17 +245,9 @@ extension String._XContent.UTF16View : Sequence {
         _buffer = .deep16(start + 1, end)
         return start.pointee
       case .inline8(var x, let i):
-        return x.withUnsafeMutableBufferPointer {
-          if i == $0.count { return nil }
-          _buffer = .inline8(x, i + 1)
-          return UInt16($0[Int(i)])
-        }
+        _sanityCheckFailure("Unreachable")
       case .inline16(var x, let i):
-        return x.withUnsafeMutableBufferPointer {
-          if i == $0.count { return nil }
-          _buffer = .inline16(x, i + 1)
-          return $0[Int(i)]
-        }
+        _sanityCheckFailure("Unreachable")
       case .nsString(let i):
         let s = unsafeBitCast(_owner, to: _NSStringCore.self)
         if i == s.length() { return nil }
