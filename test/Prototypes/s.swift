@@ -206,11 +206,7 @@ struct _TruncExt<Input: BinaryInteger, Output: FixedWidthInteger>
 extension String._XContent.UTF16View : Sequence {
   struct Iterator : IteratorProtocol {
     internal enum _Buffer {
-    case deep8(UnsafePointer<UInt8>, UnsafePointer<UInt8>)
     case deep16(UnsafePointer<UInt16>, UnsafePointer<UInt16>)
-    case inline8(UInt, UInt8)
-    case inline16(UInt, UInt8)
-    case nsString(Int)
     }
     
     internal var _buffer: _Buffer
@@ -236,23 +232,10 @@ extension String._XContent.UTF16View : Sequence {
     @inline(__always)
     mutating func next() -> UInt16? {
       switch _buffer {
-      case .deep8(let start, let end):
-        guard start != end else { return nil }
-        _buffer = .deep8(start + 1, end)
-        return UInt16(start.pointee)
       case .deep16(let start, let end):
         guard start != end else { return nil }
         _buffer = .deep16(start + 1, end)
         return start.pointee
-      case .inline8(var x, let i):
-        _sanityCheckFailure("Unreachable")
-      case .inline16(var x, let i):
-        _sanityCheckFailure("Unreachable")
-      case .nsString(let i):
-        let s = unsafeBitCast(_owner, to: _NSStringCore.self)
-        if i == s.length() { return nil }
-        _buffer = .nsString(i + 1)
-        return s.characterAtIndex(i)
       }
     }
   }
