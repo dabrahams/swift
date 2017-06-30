@@ -205,25 +205,31 @@ struct _TruncExt<Input: BinaryInteger, Output: FixedWidthInteger>
 
 extension String._XContent.UTF16View : Sequence {
   struct Iterator : IteratorProtocol {
-    internal enum _Buffer {
-    case deep16(UnsafePointer<UInt16>, UnsafePointer<UInt16>)
-    }
+    internal var _start: Int = 0
+    internal let _end: Int
+    internal let _stride: Int
     
-    internal var _buffer: _Buffer
-    internal var _owner: AnyObject?
+    internal enum _Layout {
+    case deep, inline, cocoa
+    }
+    internal let _layout: _Layout
+    internal let _inline: Builtin.Int128
+      = Builtin.zext_Int8_Int128((0 as Int8)._value)
+    internal let _baseAddress: UnsafePointer<UInt8>
+    internal let _owner: AnyObject?
 
     @inline(__always)
     init(_ content: String._XContent) {
       defer { _fixLifetime(content) }
       if content._layout == .utf16 {
         let x = content._utf16
+        _end = x.count &<< 1
+        _stride = 2
+        _layout = .deep
+        _baseAddress = UnsafeRawPointer(x._baseAddress)
+          .assumingMemoryBound(to: UInt8.self)
         _owner = x
-        _buffer = x.withUnsafeBufferPointer {
-          let s = $0.baseAddress._unsafelyUnwrappedUnchecked
-          return .deep16(s, s + $0.count)
-        }
       }
-      
       else {
         _sanityCheckFailure("Unreachable")
       }
@@ -231,15 +237,35 @@ extension String._XContent.UTF16View : Sequence {
 
     @inline(__always)
     mutating func next() -> UInt16? {
-      switch _buffer {
-      case .deep16(let start, let end):
-        guard start != end else { return nil }
-        _buffer = .deep16(start + 1, end)
-        return start.pointee
+      if _start != _end {
+        defer { _start = _start &+ _stride }
+        
+        if _layout == .deep {
+          let x0 = UInt16(_baseAddress[_start])
+          let oneIfWide = _stride &- 1
+          let x1 = UInt16(_baseAddress[_start + oneIfWide])
+#if _endian(little)
+          return x1 &<< (oneIfWide &<< 3) | x0
+#else
+          return x0 &<< (oneIfWide &<< 3) | x1
+#endif
+        }
+        else if _layout == .inline {
+          return UInt16(
+            Builtin.trunc_Int128_Int16(
+              Builtin.lshr_Int128(
+                _inline, Builtin.zext_Int64_Int128(_start._value))))
+        }
+        else {
+          let s = unsafeBitCast(
+            _owner._unsafelyUnwrappedUnchecked, to: _NSStringCore.self)
+          return s.characterAtIndex(_start)
+        }
       }
+      return nil
     }
   }
-
+  
   @inline(__always)
   func makeIterator() -> Iterator {
     return Iterator(_content)
