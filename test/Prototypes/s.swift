@@ -227,20 +227,15 @@ extension String._XContent._Inline {
       return body(&fullBuf)
     }
   }
-  
+
   public func copiedToUnsafeBuffer(in scratch: inout String._XContent._Scratch)
   -> UnsafeBufferPointer<CodeUnit> {
-    return withUnsafeMutablePointer(to: &scratch) {
-      UnsafeMutableRawPointer($0).storeBytes(
-        of: _storage, as: String._XContent._InlineStorage.self)
-      
-      let start = UnsafeRawPointer($0).bindMemory(
-        to: CodeUnit.self,
-        capacity: capacity
-      )
-      _sanityCheck(start[count] == 0)
-      return UnsafeBufferPointer(start: start, count: count)
-    }
+    let r = UnsafeMutableRawPointer(Builtin.addressof(&scratch))
+    let p = r.bindMemory(to: String._XContent._InlineStorage.self, capacity: 1)
+    p.pointee = _storage
+    let start = r.bindMemory(to: CodeUnit.self, capacity: capacity)
+    _sanityCheck(start[count] == 0) // check for NUL terminator
+    return UnsafeBufferPointer(start: start, count: count)
   }
 
   public mutating func append(_ u: CodeUnit) {
@@ -289,7 +284,10 @@ extension String._XContent._Unowned {
   }
 
   public var unsafeBuffer: UnsafeBufferPointer<CodeUnit> {
-    return UnsafeBufferPointer(start: _start, count: Int(_count))
+    @inline(__always)
+    get {
+      return UnsafeBufferPointer(start: _start, count: Int(_count))
+    }
   }
 }
 
@@ -489,36 +487,54 @@ extension String._XContent.UTF16View : Sequence {
   func _copyContents(
     initializing destination: UnsafeMutableBufferPointer<Element>
   ) -> (Iterator, UnsafeMutableBufferPointer<Element>.Index) {
-    var scratch = String._XContent._scratch()
-    defer { _fixLifetime(scratch) }
-    
-    if let codeUnits = _content._existingLatin1(in: &scratch) {
-      let (_, n) = _MapCollection(
-        codeUnits, through: _TruncExt()
-      )._copyContents(initializing: destination)
-      return (Iterator(_content, offset: n), n)
+    var n = 0
+
+    if var d = destination._position {
+      n = destination._end._unsafelyUnwrappedUnchecked - d
+      
+      var scratch = String._XContent._scratch()
+      defer { _fixLifetime(scratch) }
+
+      if let source = _content._existingLatin1(in: &scratch) {
+        if var s = source._position {
+          n = Swift.min(n, source._end._unsafelyUnwrappedUnchecked - s)
+          let end = d + n
+          while d != end {
+            d.pointee = UInt16(extendingOrTruncating: s.pointee)
+            d += 1
+            s += 1
+          }
+        }
+      }
+      else if let source = _content._existingUTF16(in: &scratch) {
+        /*
+        n = source._copyContents(initializing: destination).1
+        */
+        if let s = source._position {
+          n = Swift.min(n, source._end._unsafelyUnwrappedUnchecked - s)
+          d.initialize(from: s, count: n)
+        }
+        return (Iterator(_content, offset: n), n)
+      }
+      else {
+        n = _copyContentsSlow(initializing: destination)
+      }
     }
-    else if let codeUnits = _content._existingUTF16(in: &scratch) {
-      let (_, n) = codeUnits._copyContents(initializing: destination)
-      return (Iterator(_content, offset: n), n)
-    }
-    else {
-      return _copyContentsSlow(initializing: destination)
-    }
+    return (Iterator(_content, offset: n), n)
   }
 
   @inline(never)
   func _copyContentsSlow(
     initializing destination: UnsafeMutableBufferPointer<Element>
-  ) -> (Iterator, UnsafeMutableBufferPointer<Element>.Index) {
+  ) -> Int {
     var source = makeIterator()
-    guard var p = destination.baseAddress else { return (source, 0) }
+    guard var p = destination.baseAddress else { return 0 }
     for n in 0..<destination.count {
-      guard let x = source.next() else { return (source, n) }
+      guard let x = source.next() else { return n }
       p.initialize(to: x)
       p += 1
     }
-    return (source, destination.count)
+    return destination.count
   }
 }
 
@@ -727,6 +743,7 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
     return true
   }
 
+  @inline(__always)
   mutating func _allocateCapacity(_ minCapacity: Int, forcingUTF16: Bool) {
     var scratch = String._XContent._scratch()
     defer {
@@ -738,26 +755,22 @@ extension String._XContent.UTF16View : RangeReplaceableCollection {
       self._content = .utf16(
         String._UTF16Storage.copying(codeUnits, minCapacity: minCapacity))
     }
-    else if let codeUnits = _content._existingLatin1(in: &scratch) {
-      if !forcingUTF16 {
-        self._content = .latin1(
-          String._Latin1Storage.copying(
-            codeUnits, minCapacity: minCapacity, isASCII: _content.isASCII))
-      }
-      else {
-        self._content = .utf16(
-          String._UTF16Storage.copying(
-            _MapCollection(codeUnits, through: _TruncExt()),
-            minCapacity: minCapacity,
-            maxElement: _content.isASCII == true ? 0x7F
-            : _content.isASCII == false ? 0xFF : nil)
-        )
-      }
+    else if !forcingUTF16, let codeUnits = _content._existingLatin1(
+      in: &scratch
+    ) {
+      self._content = .latin1(
+        String._Latin1Storage.copying(
+          codeUnits, minCapacity: minCapacity, isASCII: _content.isASCII))
     }
     else {
-      self._content = .utf16(
-        String._UTF16Storage.copying(self, minCapacity: minCapacity))
+      _allocateCapacitySlow(minCapacity)
     }
+  }
+
+  @inline(never)
+  mutating func _allocateCapacitySlow(_ minCapacity: Int) {
+    self._content = .utf16(
+      String._UTF16Storage.copying(self, minCapacity: minCapacity))
   }
   
   mutating func reserveCapacity(_ minCapacity: Int) {
