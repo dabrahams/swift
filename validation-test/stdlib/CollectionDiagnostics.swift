@@ -68,8 +68,7 @@ struct AnotherGoodIndexable1 : Indexable {
   subscript(pos: Int) -> Int { return 0 }
 }
 
-// expected-warning@+2 {{'Indexable' is deprecated: it will be removed in Swift 4.0.  Please use 'Collection' instead}}
-// expected-error@+1 {{type 'BadIndexable2' does not conform to protocol 'Collection'}}
+// expected-warning@+1 {{'Indexable' is deprecated: it will be removed in Swift 4.0.  Please use 'Collection' instead}}
 struct BadIndexable2 : Indexable {
   var startIndex: Int { return 0 }
   var endIndex: Int { return 0 }

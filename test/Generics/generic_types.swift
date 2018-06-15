@@ -161,7 +161,7 @@ struct SequenceY : Sequence, IteratorProtocol {
 }
 
 func useRangeOfPrintables(_ roi : RangeOfPrintables<[Int]>) {
-  var rop : RangeOfPrintables<X> // expected-error{{type 'X' does not conform to protocol 'Sequence'}}
+  var rop : RangeOfPrintables<X> // expected-error{{type 'X' does not conform to protocol '_Sequence'}}
   var rox : RangeOfPrintables<SequenceY> // expected-error{{type 'SequenceY.Element' (aka 'Y') does not conform to protocol 'MyFormattedPrintable'}}
 }
 

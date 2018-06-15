@@ -30,7 +30,7 @@ public class AnyIterator<T> : _AnyIteratorBase, IteratorProtocol {
 
 /// Every `IteratorProtocol` can also be a `Sequence`.  Note that
 /// traversing the sequence consumes the iterator.
-extension AnyIterator : Sequence {
+extension AnyIterator {
 
   /// Returns `self`.
   public func makeIterator() -> AnyIterator

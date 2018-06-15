@@ -486,7 +486,7 @@ func genericCollectionBreak<T : Collection>(_ xx: T) {
 // CHECK: bb0([[COLLECTION:%.*]] : @trivial $*T):
 // CHECK:   [[ITERATOR_BOX:%.*]] = alloc_box $<τ_0_0 where τ_0_0 : Collection> { var τ_0_0.Iterator } <T>, var, name "$x$generator"
 // CHECK:   [[PROJECT_ITERATOR_BOX:%.*]] = project_box [[ITERATOR_BOX]]
-// CHECK:   [[MAKE_ITERATOR_FUNC:%.*]] = witness_method $T, #Sequence.makeIterator!1 : <Self where Self : Sequence> (Self) -> () -> Self.Iterator : $@convention(witness_method: Sequence) <τ_0_0 where τ_0_0 : Sequence> (@in_guaranteed τ_0_0) -> @out τ_0_0.Iterator
+// CHECK:   [[MAKE_ITERATOR_FUNC:%.*]] = witness_method $T, #_Sequence.makeIterator!1 : <Self where Self : _Sequence> (Self) -> () -> Self.Iterator : $@convention(witness_method: _Sequence) <τ_0_0 where τ_0_0 : _Sequence> (@in_guaranteed τ_0_0) -> @out τ_0_0.Iterator
 // CHECK:   apply [[MAKE_ITERATOR_FUNC]]<T>([[PROJECT_ITERATOR_BOX]], [[COLLECTION]])
 // CHECK:   [[ELT_STACK:%.*]] = alloc_stack $Optional<T.Element>
 // CHECK:   br [[LOOP_DEST:bb[0-9]+]]

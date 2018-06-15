@@ -5,7 +5,7 @@
 protocol Fooable {
   associatedtype Bar
 
-  func foo<T: Fooable>(x x: T) -> Self.Bar where T.Bar == Self.Bar
+  func foo<T: Fooable>(x: T) -> Self.Bar where T.Bar == Self.Bar
 }
 
 struct X {}
@@ -16,11 +16,11 @@ struct X {}
 struct Foo: Fooable {
   typealias Bar = X
 
-  func foo<T: Fooable>(x x: T) -> X where T.Bar == X { return X() }
+  func foo<T: Fooable>(x: T) -> X where T.Bar == X { return X() }
 }
 
 // rdar://problem/19049566
-// CHECK-LABEL: sil shared [transparent] [serialized] [thunk] @$S17witness_same_type14LazySequenceOfVyxq_Gs0E0AAsAEP12makeIterator0H0QzyFTW : $@convention(witness_method: Sequence) <τ_0_0, τ_0_1 where τ_0_0 : Sequence, τ_0_1 == τ_0_0.Element> (@in_guaranteed LazySequenceOf<τ_0_0, τ_0_1>) -> @out AnyIterator<τ_0_1>
+// CHECK-LABEL: sil shared [transparent] [serialized] [thunk] @$S17witness_same_type14LazySequenceOfVyxq_Gs01_E0AAsAEP12makeIterator0H0QzyFTW : $@convention(witness_method: _Sequence) <τ_0_0, τ_0_1 where τ_0_0 : _Sequence, τ_0_1 == τ_0_0.Element> (@in_guaranteed LazySequenceOf<τ_0_0, τ_0_1>) -> @out AnyIterator<τ_0_1>
 public struct LazySequenceOf<SS : Sequence, A> : Sequence where SS.Iterator.Element == A {
   public func makeIterator() -> AnyIterator<A> { 
     var opt: AnyIterator<A>?

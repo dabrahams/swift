@@ -496,7 +496,7 @@ extension Sequence {
   var rdar24329052: (Element) -> Void { fatalError() }
   // expected-note@+1 {{generic parameter 'Element' of instance method 'foo24329052(_:)' declared here}}
   func foo24329052<Element>(_ v: Element) { rdar24329052(v) }
-  // expected-error@-1 {{cannot convert value of type 'Element' (generic parameter of instance method 'foo24329052(_:)') to expected argument type 'Self.Element' (associated type of protocol 'Sequence')}}
+  // expected-error@-1 {{cannot convert value of type 'Element' (generic parameter of instance method 'foo24329052(_:)') to expected argument type 'Self.Element' (associated type of protocol '_Sequence')}}
 }
 
 func rdar27700622<E: Comparable>(_ input: [E]) -> [E] {

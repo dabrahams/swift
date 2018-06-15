@@ -121,7 +121,7 @@ func f2() {
 }
 
 struct MyGenStruct1<T, U: ExpressibleByStringLiteral, V: Sequence> {
-// CHECK: decl: struct MyGenStruct1<T, U, V> where U : ExpressibleByStringLiteral, V : Sequence
+// CHECK: decl: struct MyGenStruct1<T, U, V> where U : ExpressibleByStringLiteral, V : _Sequence
 // FIXME: why are these references to the base type?
 // FIXME: TypeReconstruction should support Node::Kind::GenericTypeParamDecl ('fp')
 // CHECK: decl: FAILURE for 'T' usr=s:14swift_ide_test12MyGenStruct1V1Txmfp

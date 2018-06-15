@@ -48,7 +48,7 @@
 #define BUILTIN_EXPRESSIBLE_BY_LITERAL_PROTOCOL_(name) \
     BUILTIN_EXPRESSIBLE_BY_LITERAL_PROTOCOL_WITH_NAME(name, "_" #name)
 
-PROTOCOL(Sequence)
+PROTOCOL_(Sequence)
 PROTOCOL(IteratorProtocol)
 PROTOCOL(RawRepresentable)
 PROTOCOL(Equatable)

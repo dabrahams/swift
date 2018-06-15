@@ -16,12 +16,13 @@ protocol IteratorProtocol {
   mutating func next() ->  Element?
 }
 
-protocol Sequence {
+protocol _Sequence {
   associatedtype Element
   associatedtype Iterator : IteratorProtocol where Iterator.Element == Element
 
   func makeIterator() -> Iterator
 }
+typealias Sequence = _Sequence
 
 enum Optional<T> {
 case none

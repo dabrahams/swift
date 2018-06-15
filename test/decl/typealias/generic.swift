@@ -416,7 +416,7 @@ func takesInt(_: Element<[Int]>) {}
 takesInt(10)
 
 func failsRequirementCheck(_: Element<Int>) {}
-// expected-error@-1 {{type 'Int' does not conform to protocol 'Sequence'}}
+// expected-error@-1 {{type 'Int' does not conform to protocol '_Sequence'}}
 
 //
 // Sugar in base types of a typealias.

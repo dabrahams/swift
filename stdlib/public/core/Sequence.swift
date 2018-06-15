@@ -322,7 +322,7 @@ public protocol IteratorProtocol {
 /// makes no other requirements about element access, so routines that
 /// traverse a sequence should be considered O(*n*) unless documented
 /// otherwise.
-public protocol Sequence {
+public protocol _Sequence {
   /// A type representing the sequence's elements.
   associatedtype Element
 
@@ -615,6 +615,8 @@ public protocol Sequence {
     initializing ptr: UnsafeMutableBufferPointer<Element>
   ) -> (Iterator,UnsafeMutableBufferPointer<Element>.Index)
 }
+
+public typealias Sequence = _Sequence
 
 // Provides a default associated type witness for Iterator when the
 // Self type is both a Sequence and an Iterator.
