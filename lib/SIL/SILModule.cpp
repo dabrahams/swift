@@ -13,6 +13,7 @@
 #define DEBUG_TYPE "sil-module"
 #include "swift/SIL/SILModule.h"
 #include "Linker.h"
+#include "swift/AST/ASTMangler.h"
 #include "swift/AST/GenericEnvironment.h"
 // SWIFT_ENABLE_TENSORFLOW
 #include "swift/AST/ASTMangler.h"

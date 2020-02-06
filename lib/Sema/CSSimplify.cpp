@@ -3284,6 +3284,30 @@ bool ConstraintSystem::repairFailures(
                                 locator))
       break;
 
+    {
+      auto *calleeLocator = getCalleeLocator(loc);
+      if (hasFixFor(calleeLocator, FixKind::AddQualifierToAccessTopLevelName)) {
+        if (auto overload = findSelectedOverloadFor(calleeLocator)) {
+          if (auto choice = overload->choice.getDeclOrNull()) {
+            // If this is an argument of a symetric function/operator let's
+            // not fix any position rather than first because we'd just end
+            // up with ambiguity instead of reporting an actual problem with
+            // mismatched type since each argument can have district bindings.
+            if (auto *AFD = dyn_cast<AbstractFunctionDecl>(choice)) {
+              auto *paramList = AFD->getParameters();
+              auto firstParamType = paramList->get(0)->getInterfaceType();
+              if (elt.castTo<LocatorPathElt::ApplyArgToParam>().getParamIdx() >
+                      0 &&
+                  llvm::all_of(*paramList, [&](const ParamDecl *param) -> bool {
+                    return param->getInterfaceType()->isEqual(firstParamType);
+                  }))
+                return true;
+            }
+          }
+        }
+      }
+    }
+
     conversionsOrFixes.push_back(
         AllowArgumentMismatch::create(*this, lhs, rhs, loc));
     break;
@@ -6195,8 +6219,27 @@ ConstraintSystem::SolutionKind ConstraintSystem::simplifyMemberConstraint(
       if (candidates.size() == 1)
         candidates.front()->setFavored();
 
-      generateConstraints(candidates, memberTy, outerAlternatives,
-                          useDC, locator);
+      // We *might* include any non-members that we found in outer contexts in
+      // some special cases, for backwards compatibility: first, we have to be
+      // looking for one of the special names ('min' or 'max'), and second, all
+      // of the inner (viable) results need to come from conditional
+      // conformances. The second condition is how the problem here was
+      // encountered: a type ('Range') was made to conditionally conform to a
+      // new protocol ('Sequence'), which introduced some extra methods
+      // ('min' and 'max') that shadowed global functions that people regularly
+      // called within extensions to that type (usually adding 'clamp').
+      bool treatAsViable =
+          (member.isSimpleName("min") || member.isSimpleName("max")) &&
+          allFromConditionalConformances(DC, baseTy, result.ViableCandidates);
+
+      generateConstraints(
+          candidates, memberTy, outerAlternatives, useDC, locator, None,
+          /*requiresFix=*/!treatAsViable,
+          [&](unsigned, const OverloadChoice &) {
+            return treatAsViable ? nullptr
+                                 : AddQualifierToAccessTopLevelName::create(
+                                       *this, locator);
+          });
     }
   }
 
@@ -6553,14 +6596,29 @@ static Type getFunctionBuilderTypeFor(ConstraintSystem &cs, unsigned paramIdx,
 bool ConstraintSystem::resolveClosure(TypeVariableType *typeVar,
                                       Type contextualType,
                                       ConstraintLocatorBuilder locator) {
+  auto getContextualParamAt =
+      [&contextualType](unsigned index) -> Optional<AnyFunctionType::Param> {
+    auto *fnType = contextualType->getAs<FunctionType>();
+    return fnType && fnType->getNumParams() > index
+               ? fnType->getParams()[index]
+               : Optional<AnyFunctionType::Param>();
+  };
+
   auto *closureLocator = typeVar->getImpl().getLocator();
   auto *closure = cast<ClosureExpr>(closureLocator->getAnchor());
-
-  auto *closureType = getClosureType(closure);
+  auto *inferredClosureType = getClosureType(closure);
 
   auto *paramList = closure->getParameters();
+  SmallVector<AnyFunctionType::Param, 4> parameters;
   for (unsigned i = 0, n = paramList->size(); i != n; ++i) {
-    const auto &param = closureType->getParams()[i];
+    auto param = inferredClosureType->getParams()[i];
+
+    // In case of anonymous parameters let's infer flags from context
+    // that helps to infer variadic and inout earlier.
+    if (closure->hasAnonymousClosureVars()) {
+      if (auto contextualParam = getContextualParamAt(i))
+        param = param.withFlags(contextualParam->getParameterFlags());
+    }
 
     Type internalType;
 
@@ -6574,17 +6632,25 @@ bool ConstraintSystem::resolveClosure(TypeVariableType *typeVar,
       auto *paramLoc =
           getConstraintLocator(closure, LocatorPathElt::TupleElement(i));
 
-      internalType = createTypeVariable(paramLoc, TVO_CanBindToLValue |
-                                                      TVO_CanBindToNoEscape);
+      auto *typeVar = createTypeVariable(paramLoc, TVO_CanBindToLValue |
+                                                       TVO_CanBindToNoEscape);
+
+      // If external parameter is variadic it translates into an array in
+      // the body of the closure.
+      internalType =
+          param.isVariadic() ? ArraySliceType::get(typeVar) : Type(typeVar);
 
       auto externalType = param.getOldType();
-      addConstraint(ConstraintKind::BindParam, externalType, internalType,
-                    paramLoc);
+      addConstraint(ConstraintKind::BindParam, externalType, typeVar, paramLoc);
     }
 
     setType(paramList->get(i), internalType);
+    parameters.push_back(param);
   }
 
+  auto closureType =
+      FunctionType::get(parameters, inferredClosureType->getResult(),
+                        inferredClosureType->getExtInfo());
   assignFixedType(typeVar, closureType, closureLocator);
 
   if (auto last = locator.last()) {
@@ -6592,10 +6658,11 @@ bool ConstraintSystem::resolveClosure(TypeVariableType *typeVar,
       auto *calleeLocator = getCalleeLocator(getConstraintLocator(locator));
       if (auto functionBuilderType = getFunctionBuilderTypeFor(
               *this, argToParam->getParamIdx(), calleeLocator)) {
-        auto result = matchFunctionBuilder(
-            closure, functionBuilderType, closureType->getResult(),
-            ConstraintKind::Conversion, calleeLocator, locator);
-        return result.isSuccess();
+        if (auto result = matchFunctionBuilder(
+                closure, functionBuilderType, closureType->getResult(),
+                ConstraintKind::Conversion, calleeLocator, locator)) {
+          return result->isSuccess();
+        }
       }
     }
   }
@@ -8846,6 +8913,7 @@ ConstraintSystem::SolutionKind ConstraintSystem::simplifyFixConstraint(
   case FixKind::AllowInvalidUseOfTrailingClosure:
   case FixKind::AllowNonClassTypeToConvertToAnyObject:
   case FixKind::SpecifyClosureReturnType:
+  case FixKind::AddQualifierToAccessTopLevelName:
     llvm_unreachable("handled elsewhere");
   }
 
@@ -9095,56 +9163,57 @@ void ConstraintSystem::addConstraint(ConstraintKind kind, Type first,
 }
 
 void ConstraintSystem::addContextualConversionConstraint(
-    Expr *expr, ContextualTypeInfo contextualType) {
-  Type convertType = contextualType.getType();
-  if (convertType.isNull())
+    Expr *expr, Type conversionType, ContextualTypePurpose purpose,
+    bool isOpaqueReturnType) {
+  if (conversionType.isNull())
     return;
 
   // Determine the type of the constraint.
   auto constraintKind = ConstraintKind::Conversion;
-  switch (contextualType.purpose) {
-    case CTP_ReturnStmt:
-    case CTP_ReturnSingleExpr:
-    case CTP_Initialization:
-      if (contextualType.isOpaqueReturnType)
-        constraintKind = ConstraintKind::OpaqueUnderlyingType;
-      break;
+  switch (purpose) {
+  case CTP_ReturnStmt:
+  case CTP_ReturnSingleExpr:
+  case CTP_Initialization:
+    if (isOpaqueReturnType)
+      constraintKind = ConstraintKind::OpaqueUnderlyingType;
+    break;
 
-    case CTP_CallArgument:
-      constraintKind = ConstraintKind::ArgumentConversion;
-      break;
+  case CTP_CallArgument:
+    constraintKind = ConstraintKind::ArgumentConversion;
+    break;
 
-    case CTP_YieldByReference:
-      // In a by-reference yield, we expect the contextual type to be an
-      // l-value type, so the result must be bound to that.
-      constraintKind = ConstraintKind::Bind;
-      break;
+  case CTP_YieldByReference:
+    // In a by-reference yield, we expect the contextual type to be an
+    // l-value type, so the result must be bound to that.
+    constraintKind = ConstraintKind::Bind;
+    break;
 
-    case CTP_ArrayElement:
-    case CTP_AssignSource:
-    case CTP_CalleeResult:
-    case CTP_CannotFail:
-    case CTP_Condition:
-    case CTP_Unused:
-    case CTP_YieldByValue:
-    case CTP_ThrowStmt:
-    case CTP_EnumCaseRawValue:
-    case CTP_DefaultParameter:
-    case CTP_ClosureResult:
-    case CTP_DictionaryKey:
-    case CTP_DictionaryValue:
-    case CTP_CoerceOperand:
-    case CTP_SubscriptAssignSource:
-    case CTP_ForEachStmt:
-      break;
+  case CTP_ArrayElement:
+  case CTP_AssignSource:
+  case CTP_CalleeResult:
+  case CTP_CannotFail:
+  case CTP_Condition:
+  case CTP_Unused:
+  case CTP_YieldByValue:
+  case CTP_ThrowStmt:
+  case CTP_EnumCaseRawValue:
+  case CTP_DefaultParameter:
+  case CTP_AutoclosureDefaultParameter:
+  case CTP_ClosureResult:
+  case CTP_DictionaryKey:
+  case CTP_DictionaryValue:
+  case CTP_CoerceOperand:
+  case CTP_SubscriptAssignSource:
+  case CTP_ForEachStmt:
+    break;
   }
 
   // Add the constraint.
-  bool isForSingleExprFunction = (contextualType.purpose == CTP_ReturnSingleExpr);
+  bool isForSingleExprFunction = (purpose == CTP_ReturnSingleExpr);
   auto *convertTypeLocator = getConstraintLocator(
       expr, LocatorPathElt::ContextualType(isForSingleExprFunction));
-  addConstraint(constraintKind, getType(expr), convertType,
-               convertTypeLocator, /*isFavored*/ true);
+  addConstraint(constraintKind, getType(expr), conversionType,
+                convertTypeLocator, /*isFavored*/ true);
 }
 
 Type ConstraintSystem::addJoinConstraint(
@@ -9309,7 +9378,12 @@ ConstraintSystem::simplifyConstraint(const Constraint &constraint) {
 
   case ConstraintKind::BindOverload:
     if (auto *fix = constraint.getFix()) {
-      if (recordFix(fix))
+      // TODO(diagnostics): Impact should be associated with a fix unless
+      // it's a contextual problem, then only solver can decide what the impact
+      // would be in each particular situation.
+      auto impact =
+          fix->getKind() == FixKind::AddQualifierToAccessTopLevelName ? 10 : 1;
+      if (recordFix(fix, impact))
         return SolutionKind::Error;
     }
 
