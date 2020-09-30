@@ -1,11 +1,26 @@
 # PROVISIONAL C++ Interoperability Specification
 
 This document condenses the many options discussed in the [C++ Interoperability
-Manifesto][manifesto] into a single set of choices.  It is not official in any
-way, but it provides one possible coherent view of what C++ interoperability
-will look like.
+Manifesto][manifesto] into a single set of choices, with much less narrative.
+It is not official in any way, but it provides one possible coherent view of
+what C++ interoperability will look like.
 
-## Goals
+## Goals and Tradeoffs
+
+These are not the goals from the corresponding section of the
+[manifesto][manifesto]; instead, they are the criteria by which we've chosen
+what to include in this provisional specification.
+
+- **API Accessibility**: all C++ APIs should be usable from Swift, and all Swift
+  APIs usable from C++, without manual annotation or wrapping.
+- The following take precedence over safety and ergonomics:
+  - API Accessibility.
+  - Avoiding any performance penalties at the API boundary.
+- The ability to easily make an imported C++ API safe and ergonomic in Swift
+  with manual intervention (annotation, wrapping, etc.) is a goal.
+- Using a C++ API from Swift should not introduce any new, Swift-specific
+  “gotchas,” and vice-versa.
+  
 ## Current state of art: importing C code into Swift
 ## Importing C++ APIs into Swift
 ### Names, identifiers and keywords
