@@ -21,22 +21,81 @@ what to include in this provisional specification.
 - Using a C++ API from Swift should not introduce any new, Swift-specific
   “gotchas,” and vice-versa.
   
-## Current state of art: importing C code into Swift
-## Importing C++ APIs into Swift
-### Names, identifiers and keywords
-### Functions
+## Access to entities across langauges
+
+Keeping all APIs accessible means being able to uniquely name, in each language,
+every distinct entity that can be named in the other language.  For example,
+there must be a way distinguish `T*` from `T&` in Swift.
+
+## Escaped Names
+
+In Swift, the “escaped name” `@cplusplus(`*cpp-name*\ `)` refers to the C++ entity
+identified by *cpp-name* in C++.  In C++, the escaped name
+`@swift(`*swift-name*\ `)` refers to the Swift entity identified by *swift-name*
+in Swift.
+
+## Equivalences
+
+Many entities are mapped to equivalent names in the other language. For example,
+in Swift
+
+- `@cplusplus(int)` is equivalent to `Int`.
+- `@cplusplus(std::uncaught_exception)` is equivalent to `std.uncaught_exception`.
+- `@cplusplus(T*)` is equivalent to `UnsafeMutablePointer<U>` when
+  `@cplusplus(T)` is equivalent to `U`.
+
+We'll write `@cplusplus(X) == Y` to mean `@cplusplus(X)` and `Y` are equivalent
+in Swift.
+
+## Similar Types
+
+Some types without an exact equivalent across languages will nonetheless have a
+close correspondence with a type in the other language.  For example, `T&` in
+C++, where `T` is not *cv-qualified*, corresponds closely to
+`UnsafeMutablePointer<U>` in Swift where `U == @cplusplus(T)`.  Similar types
+should implicitly convert:
+
+```swift
+func f0(p: UnsafeMutablePointer<Int>, g: @cplusplus(int&(*)(int&))) 
+  -> UnsafeMutablePointer<Int>
+{
+  g(p) // bidirectional implicit conversion
+}
+```
+
+and when there is a unique similar type but no exact equivalent, should be
+implicitly deduced in deduced contexts.  For example, if there is no Swift
+equivalent for `T&` (e.g. `CPlusPlusReference<U>`), this function should compile
+without error:
+
+```swift
+func f(g: @cplusplus(int&(*)())) -> UnsafeMutablePointer<Int> {
+  let p = g() // p deduced as UnsafeMutablePointer<Int>
+  return p
+}
+```
+
+We'll write `@cplusplus(T) ~ U` and `@cplusplus(T) ~= U` to mean that
+`@cplusplus(T)` and `U` are similar, or uniquely similar, in Swift.
+
+## Functions
+
 #### Non-const pointer and reference parameters to C++ functions
 
 Unless otherwise-annotated, pointer and reference to non-const `T` are exposed
-as exposed to Swift as `UnsafeMutablePointer<T>`.
+to Swift as `UnsafeMutablePointer<T>`.
 
-**Rationale**: For pointers, the precedent is set by existing C interop.
+<details><summary>**Rationale**</summary>
+For pointers, the precedent is set by existing C interop.
 Reference-to-non-const parameter types *could* be mapped to `inout` in call
 context, but in implementation context they would fail to provide the
 exclusivity guarantee implied by `inout` (as would pointer to non-`const`
 parameter types).  Given that the call context naturally supports Swift
 `inout` syntax for both pointers and references, there's no advantage in mapping
 non-const references differently from non-const pointers.
+</details>
+
+<details><summary>**Option**</summary>We could consider introducing `CppReference<T>`</details>
 
 #### Const reference parameters
 #### Mapping overload sets
