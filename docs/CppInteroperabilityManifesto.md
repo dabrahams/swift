@@ -398,7 +398,7 @@ In C++, const references in function arguments are most often used to avoid
 copying objects passed to functions. Swift solves this problem in two ways:
 
 - by providing language features that allow the engineer to introduce
-  indirections (for example, reference types, existential types, indirect enum
+  indirections (for example, reference types, indirect enum
   cases, tools for defining copy-on-write types),
 
 - by automatically passing large arguments indirectly without copying them,
