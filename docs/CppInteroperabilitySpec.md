@@ -29,9 +29,9 @@ there must be a way distinguish `T*` from `T&` in Swift.
 
 ## Escaped Names
 
-In Swift, the “escaped name” `@cplusplus(`*cpp-name*\ `)` refers to the C++ entity
+In Swift, the “escaped name” `@cplusplus(`*cpp-name*`)` refers to the C++ entity
 identified by *cpp-name* in C++.  In C++, the escaped name
-`@swift(`*swift-name*\ `)` refers to the Swift entity identified by *swift-name*
+`@swift(`*swift-name*`)` refers to the Swift entity identified by *swift-name*
 in Swift.
 
 ## Equivalences
@@ -85,7 +85,8 @@ We'll write `@cplusplus(T) ~ U` and `@cplusplus(T) ~= U` to mean that
 Unless otherwise-annotated, pointer and reference to non-const `T` are exposed
 to Swift as `UnsafeMutablePointer<T>`.
 
-<details><summary>**Rationale**</summary>
+<details><summary>Rationale</summary>
+  
 For pointers, the precedent is set by existing C interop.
 Reference-to-non-const parameter types *could* be mapped to `inout` in call
 context, but in implementation context they would fail to provide the
@@ -93,9 +94,14 @@ exclusivity guarantee implied by `inout` (as would pointer to non-`const`
 parameter types).  Given that the call context naturally supports Swift
 `inout` syntax for both pointers and references, there's no advantage in mapping
 non-const references differently from non-const pointers.
+
 </details>
 
-<details><summary>**Option**</summary>We could consider introducing `CppReference<T>`</details>
+<details><summary>Option</summary>
+  
+  We could consider introducing `CppReference<T>`
+  
+</details>
 
 #### Const reference parameters
 #### Mapping overload sets
