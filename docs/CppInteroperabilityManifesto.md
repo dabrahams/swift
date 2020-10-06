@@ -180,6 +180,25 @@ we will pick one side of the tradeoff, sometimes we will pick one side but allow
 the user to override the default, and sometimes we will add multiple facilities
 that pick different sides, forcing the user to choose.
 
+# Type Mapping
+
+A C++ function API may be implemented in C++ (the usual case), or in Swift
+(e.g. when a Swift type overrides a C++ virtual function, or when a function
+pointer or reference needs to be passed from Swift to a C++ API).  Each
+component type of the C++ function signature must be mapped to a Swift type.
+It is possible to map a given type differently depending on:
+
+* whether it appears in parameter or return type position.
+* whether the Swift context is calling the API or implementing it.
+
+It's desirable to minimize these differences.
+
+Naturally, the four combinations of parameter/return and calling/implementing
+context must be considered for Swift APIs exposed to C++.
+
+The cases can be referred to as “[*C++*|*Swift*] [*parameter*|*return*] type in
+[*call*|*implementation*] context.”
+
 # Current state of art: importing C code into Swift
 
 Swift/C++ interoperability builds on top of the Swift/C interoperability, so it
