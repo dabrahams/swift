@@ -25,7 +25,19 @@ what to include in this provisional specification.
 ## Importing C++ APIs into Swift
 ### Names, identifiers and keywords
 ### Functions
-#### Non-const pointer and reference parameters
+#### Non-const pointer and reference parameters to C++ functions
+
+Unless otherwise-annotated, pointer and reference to non-const `T` are exposed
+as exposed to Swift as `UnsafeMutablePointer<T>`.
+
+**Rationale**: For pointers, the precedent is set by existing C interop.
+Reference-to-non-const parameter types *could* be mapped to `inout` in call
+context, but in implementation context they would fail to provide the
+exclusivity guarantee implied by `inout` (as would pointer to non-`const`
+parameter types).  Given that the call context naturally supports Swift
+`inout` syntax for both pointers and references, there's no advantage in mapping
+non-const references differently from non-const pointers.
+
 #### Const reference parameters
 #### Mapping overload sets
 #### Inline functions
