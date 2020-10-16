@@ -65,8 +65,9 @@ func f0(p: UnsafeMutablePointer<Int>, g: @cplusplus(int&(*)(int&)))
 
 and when there is a unique similar type but no exact equivalent, should be
 implicitly deduced in deduced contexts.  For example, if there is no Swift
-equivalent for `T&` (e.g. `CPlusPlusReference<U>`), this function should compile
-without error:
+equivalent for `T&` (e.g. `UnsafeMutableCPlusPlusReference<U>`), we would make
+`UnsafeMutablePointer<U>` a unique similar type where `U == @cplusplus(T)`.
+Then this function should compile without error:
 
 ```swift
 func f(g: @cplusplus(int&(*)())) -> UnsafeMutablePointer<Int> {
@@ -75,32 +76,54 @@ func f(g: @cplusplus(int&(*)())) -> UnsafeMutablePointer<Int> {
 }
 ```
 
-We'll write `@cplusplus(T) ~ U` and `@cplusplus(T) ~= U` to mean that
-`@cplusplus(T)` and `U` are similar, or uniquely similar, in Swift.
+We'll write `@cplusplus(T) ~ U` or `@cplusplus(T) ~= U` to mean that
+`@cplusplus(T)` and `U` are similar or uniquely similar, respectively, in
+Swift.
 
 ## Functions
+
+There are various ways to annotate C++ and Swift functions to control how they
+are exposed to the other language, specifics to be covered elsewhere in this
+document.
 
 #### Non-const pointer and reference parameters to C++ functions
 
 Unless otherwise-annotated, pointer and reference to non-const `T` are exposed
-to Swift as `UnsafeMutablePointer<T>`.
+to Swift as `UnsafeMutablePointer<T>` and `@cplusplus(T&)`.
 
 <details><summary>Rationale</summary>
   
-For pointers, the precedent is set by existing C interop.
-Reference-to-non-const parameter types *could* be mapped to `inout` in call
-context, but in implementation context they would fail to provide the
-exclusivity guarantee implied by `inout` (as would pointer to non-`const`
-parameter types).  Given that the call context naturally supports Swift
-`inout` syntax for both pointers and references, there's no advantage in mapping
-non-const references differently from non-const pointers.
+For pointers, the precedent is already set by existing C interop.
 
-</details>
+Precedent aside, the following reasoning applies:
 
-<details><summary>Option</summary>
-  
-  We could consider introducing `CppReference<T>`
-  
+- in **call context**, Swift already suppors `inout` *syntax* (or implicit
+  conversion from `inout`, if you like) for forming mutable pointer arguments,
+  so the calling code works as-if the parameter had `inout` type.  Presenting
+  the signature of such a C++ function as taking an `inout` parameter would
+  simplify the user's view of the C++ API a bit, but also make the potential
+  unsafety less explicit.
+
+- in **implementation context**, a pointer to non-`const` parameter cannot be
+  exposed as into `inout` because nothing on the C++ (calling) side upholds the
+  exclusivity guarantees the compiler counts on for `inout` parameters.
+
+Semantically, C++ lvalue references are exactly like C++ pointers except for
+non-reseatability, implicit dereferencing, and the lack of pointer arithmetic.
+The same rationales apply to choices about mapping.  A different mapping, to use
+`inout` in call context, is the most we could hope for, but as noted above
+provides only marginal benefits and makes the mapping asymmetric.
+
+The choice not to provide `UnsafeMutableCPlusPlusReference<U>` is separable.
+The thinking is that:
+
+- non-reseatability is covered by `let`-bound `UnsafeMutablePointer`.
+- implicit *unsafe* dereferencing is probably not something we want to expose in
+  Swift.
+- Hiding pointer arithmetic is not enough to justify a separate type.
+  Structural similarity will allow Swift users to use `UnsafeMutablePointer` to
+  interact with both C++ pointers and references.
+ 
 </details>
 
 #### Const reference parameters
