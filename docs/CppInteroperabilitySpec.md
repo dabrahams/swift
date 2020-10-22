@@ -131,6 +131,10 @@ The same rationales apply to choices about mapping.  A different mapping, to use
 `inout` in call context, is the most we could hope for, but as noted above
 provides only marginal benefits and makes the mapping asymmetric.
 
+Mapping any two C++ types (e.g. `T*` and `T&`) to the same Swift type is a
+non-starter per our goals, as it would make some C++ APIs inaccessible.  You
+need to be able to access every template specialization and/or overload.
+
 An [extension to property wrappers
 ](https://forums.swift.org/t/pitch-2-extend-property-wrappers-to-function-and-closure-parameters)
 that seems likely to be accepted, and likely further directions, seem as though
@@ -141,6 +145,32 @@ balance in favor of creating this equivalent type instead of just mapping to
 </details>
 
 #### Const reference parameters
+
+Unless otherwise-annotated, pointer and reference to const `T` are exposed
+to Swift as `UnsafePointer<T>` and `UnsafeReference<T>`, where the
+latter is defined as:
+
+```swift
+@propertyWrapper
+struct UnsafeReference<T> {
+  public let address: UnsafePointer<T>
+  var projectedValue: Self { self }
+  init(_ address: UnsafePointer<T>) {
+    self.address = address
+  }
+  var wrappedValue: T {
+    get { address.pointee }
+  }
+}
+```
+
+<details><summary>Rationale</summary>
+
+The rationales mirror those in the previous section, with `shared` (from the
+ownership manifesto) playing the role of `inout`.
+
+</details>
+
 #### Mapping overload sets
 #### Inline functions
 ### Namespaces and modules
