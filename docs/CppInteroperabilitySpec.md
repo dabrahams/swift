@@ -89,7 +89,24 @@ document.
 #### Non-const pointer and reference parameters to C++ functions
 
 Unless otherwise-annotated, pointer and reference to non-const `T` are exposed
-to Swift as `UnsafeMutablePointer<T>` and `@cplusplus(T&)`.
+to Swift as `UnsafeMutablePointer<T>` and `UnsafeMutableReference<T>`, where the
+latter is defined as:
+
+```swift
+@propertyWrapper
+struct UnsafeMutableReference<T> {
+  public let address: UnsafeMutablePointer<T>
+  var projectedValue: Self { self }
+  init(_ address: UnsafeMutablePointer<T>) {
+    self.address = address
+  }
+  var wrappedValue: T {
+    get { address.pointee }
+    nonmutating _modify { yield &address.pointee }
+    nonmutating set { address.pointee = newValue }
+  }
+}
+```
 
 <details><summary>Rationale</summary>
   
@@ -114,16 +131,13 @@ The same rationales apply to choices about mapping.  A different mapping, to use
 `inout` in call context, is the most we could hope for, but as noted above
 provides only marginal benefits and makes the mapping asymmetric.
 
-The choice not to provide `UnsafeMutableCPlusPlusReference<U>` is separable.
-The thinking is that:
+An [extension to property wrappers
+](https://forums.swift.org/t/pitch-2-extend-property-wrappers-to-function-and-closure-parameters)
+that seems likely to be accepted, and likely further directions, seem as though
+they'll make `UnsafeMutableReference<T>` increasingly ergonomic, tipping the
+balance in favor of creating this equivalent type instead of just mapping to
+`@cplusplus(T&)`.
 
-- non-reseatability is covered by `let`-bound `UnsafeMutablePointer`.
-- implicit *unsafe* dereferencing is probably not something we want to expose in
-  Swift.
-- Hiding pointer arithmetic is not enough to justify a separate type.
-  Structural similarity will allow Swift users to use `UnsafeMutablePointer` to
-  interact with both C++ pointers and references.
- 
 </details>
 
 #### Const reference parameters
