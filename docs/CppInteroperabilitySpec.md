@@ -172,6 +172,13 @@ ownership manifesto) playing the role of `inout`.
 </details>
 
 #### Mapping overload sets
+
+The corresponding [section of the manifesto][manifesto#mapping-overload-sets]
+suggests that the `T const&` function in a `T&&`/`T const&` overload set should
+not be imported at all.  Although that would be incompatible with the mandate to
+keep the entire C++ API accessible from Swift, it's worth acknowledging that 
+such an overload set typically corresponds to an owned-convention call in Swift.
+
 #### Inline functions
 ### Namespaces and modules
 #### The "std" namespace
