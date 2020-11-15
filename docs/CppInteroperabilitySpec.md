@@ -173,7 +173,8 @@ ownership manifesto) playing the role of `inout`.
 
 #### Mapping overload sets
 
-The corresponding [section of the manifesto][manifesto#mapping-overload-sets]
+The corresponding [section](https://github.com/apple/swift/blob/master/docs/CppInteroperabilityManifesto.md#mapping-overload-sets)
+of the manifesto
 suggests that the `T const&` function in a `T&&`/`T const&` overload set should
 not be imported at all.  Although that would be incompatible with the mandate to
 keep the entire C++ API accessible from Swift, it's worth acknowledging that 
