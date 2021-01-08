@@ -105,6 +105,15 @@ func test() throws -> Int {
   try while true { // expected-error {{'try' cannot be used with 'while'}}
     try break // expected-error {{'try' cannot be used with 'break'}}
   }
+
+  try do {} // expected-error {{'try' cannot be used with 'do'}}
+  try repeat {} while false // expected-error {{'try' cannot be used with 'repeat'}}
+  try for i in 0...1 {} // expected-error {{'try' cannot be used with 'for'}}
+  
+  try switch false { // expected-error {{'try' cannot be used with 'switch'}}
+  try case false: do {} // expected-error {{}}
+  case true: do {}
+  }
   
   try throw // expected-error {{'try' must be placed on the thrown expression}} {{3-7=}} {{3-3=try }} expected-error {{expected expression in 'throw' statement}}
   ; // Reset parser.
