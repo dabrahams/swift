@@ -597,7 +597,6 @@ ParserResult<Stmt> Parser::parseStmt() {
     if (tryLoc.isValid()) diagnose(tryLoc, diag::try_on_stmt, Tok.getText());
     return parseStmtRepeat(LabelInfo);
   case tok::kw_do:
-    if (tryLoc.isValid()) diagnose(tryLoc, diag::try_on_stmt, Tok.getText());
     return parseStmtDo(LabelInfo);
   case tok::kw_for:
     if (tryLoc.isValid()) diagnose(tryLoc, diag::try_on_stmt, Tok.getText());

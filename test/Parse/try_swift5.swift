@@ -106,7 +106,7 @@ func test() throws -> Int {
     try break // expected-error {{'try' cannot be used with 'break'}}
   }
 
-  try do {} // expected-error {{'try' cannot be used with 'do'}}
+  try do {} // good since Swift 6
   try repeat {} while false // expected-error {{'try' cannot be used with 'repeat'}}
   try for i in 0...1 {} // expected-error {{'try' cannot be used with 'for'}}
   
