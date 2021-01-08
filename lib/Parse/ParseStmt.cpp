@@ -1967,7 +1967,7 @@ ParserResult<Stmt> Parser::parseStmtDo(LabeledStmtInfo labelInfo,
     if (allClauses.empty()) {
       assert(status.isErrorOrHasCompletion());
       return makeParserResult(status,
-                        new (Context) DoStmt(labelInfo, doLoc, body.get()));
+                    new (Context) DoStmt(labelInfo, tryLoc, doLoc, body.get()));
     }
 
     return makeParserResult(status,
@@ -1978,7 +1978,7 @@ ParserResult<Stmt> Parser::parseStmtDo(LabeledStmtInfo labelInfo,
   // from new line. This is just the bare `do` scoping statement.
   if (Tok.getKind() != tok::kw_while || Tok.isAtStartOfLine()) {
     return makeParserResult(status,
-                            new (Context) DoStmt(labelInfo, doLoc, body.get()));
+                    new (Context) DoStmt(labelInfo, tryLoc, doLoc, body.get()));
   }
   SourceLoc whileLoc = Tok.getLoc();
   // But if we do, advise the programmer that it's 'repeat' now.

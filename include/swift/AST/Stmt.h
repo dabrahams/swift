@@ -540,16 +540,18 @@ public:
 
 /// DoStmt - do statement, without any trailing clauses.
 class DoStmt : public LabeledStmt {
+  SourceLoc TryLoc;
   SourceLoc DoLoc;
   BraceStmt *Body;
   
 public:
-  DoStmt(LabeledStmtInfo labelInfo, SourceLoc doLoc,
+  DoStmt(LabeledStmtInfo labelInfo, SourceLoc tryLoc, SourceLoc doLoc,
          BraceStmt *body, Optional<bool> implicit = None)
     : LabeledStmt(StmtKind::Do, getDefaultImplicitFlag(implicit, doLoc),
                   labelInfo),
-      DoLoc(doLoc), Body(body) {}
+      TryLoc(tryLoc), DoLoc(doLoc), Body(body) {}
 
+  SourceLoc getTryLoc() const { return TryLoc; }
   SourceLoc getDoLoc() const { return DoLoc; }
   
   SourceLoc getStartLoc() const { return getLabelLocOrKeywordLoc(DoLoc); }
