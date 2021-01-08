@@ -597,7 +597,7 @@ ParserResult<Stmt> Parser::parseStmt() {
     if (tryLoc.isValid()) diagnose(tryLoc, diag::try_on_stmt, Tok.getText());
     return parseStmtRepeat(LabelInfo);
   case tok::kw_do:
-    return parseStmtDo(LabelInfo);
+    return parseStmtDo(LabelInfo, tryLoc);
   case tok::kw_for:
     if (tryLoc.isValid()) diagnose(tryLoc, diag::try_on_stmt, Tok.getText());
     return parseStmtForEach(LabelInfo);
@@ -633,7 +633,7 @@ ParserResult<Stmt> Parser::parseStmt() {
     SourceLoc colonLoc = Tok.getLoc();
     diagnose(colonLoc, diag::labeled_block_needs_do)
       .fixItInsert(colonLoc, "do ");
-    return parseStmtDo(LabelInfo, /*shouldSkipDoTokenConsume*/ true);
+    return parseStmtDo(LabelInfo, tryLoc, /*shouldSkipDoTokenConsume*/ true);
   }
 }
 
@@ -1925,6 +1925,7 @@ ParserResult<Stmt> Parser::parseStmtRepeat(LabeledStmtInfo labelInfo) {
 ///     (identifier ':')? 'do' stmt-brace
 ///     (identifier ':')? 'do' stmt-brace stmt-catch+
 ParserResult<Stmt> Parser::parseStmtDo(LabeledStmtInfo labelInfo,
+                                       SourceLoc tryLoc,
                                        bool shouldSkipDoTokenConsume) {
   SyntaxContext->setCreateSyntax(SyntaxKind::DoStmt);
   SourceLoc doLoc;
